@@ -153,6 +153,9 @@
   <ItemGroup>
     <ClCompile Include="HashMap.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Hash.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

@@ -2,9 +2,11 @@
 //
 
 #include <iostream>
+#include "Hash.h"
 
 int main()
 {
+	Hash<int, int, 100> t;
     std::cout << "Hello World!\n";
 }
 
