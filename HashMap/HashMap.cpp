@@ -11,6 +11,19 @@ size_t hash(const int& k)
 	return k;
 }
 
+struct TT
+{
+	uint16_t a;
+	uint16_t b;
+	uint8_t c;
+};
+
+template <>
+size_t hash(const TT& k)
+{
+	return k.a + (k.b << 16) | k.c;
+}
+
 static Hash<int, std::string, 100000> V;
 
 int main()
@@ -25,9 +38,13 @@ int main()
 	t.Add(rand(), 2);
 	v.Add(rand(), "");
 	std::string s("Test");
-	v.Add(7, s);
-	std::string test = v.Value(7);
+	v.Add(29382, s);
+	v.Add(93932, "Test 2");
+	std::string test = v.Get(29382);
 	std::cout << "Hello World!\n";
+	
+	constexpr const auto tt = sizeof(TT);
+	Hash<TT, int, 100>().Add(TT{1,2,3}, 1);
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
