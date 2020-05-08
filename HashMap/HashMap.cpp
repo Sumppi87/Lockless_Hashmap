@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include "Hash.h"
+#include "MultiHash.h"
 
 template <>
 size_t hash(const int& k)
@@ -28,6 +29,22 @@ static Hash<int, std::string, 100000> V;
 
 int main()
 {
+	{
+		MultiHash<int, int, 110> i;
+		i.Add(100, 12);
+		i.Add(100, 13);
+		i.Add(100, 15);
+		i.Add(100, 16);
+		i.Add(100, 17);
+		i.Add(84548, 17);
+		i.Add(100, 20);
+		int a[5] = {0};
+		auto c = i.Get(100, a, 5);
+		const auto t = i.Get(84548);
+		c = c;
+	}
+
+
 	Hash<int, int, 100> t;
 	constexpr auto t_ = sizeof(t);
 	Hash<int, std::string, 1000> v;
@@ -42,9 +59,9 @@ int main()
 	v.Add(93932, "Test 2");
 	std::string test = v.Get(29382);
 	std::cout << "Hello World!\n";
-	
+
 	constexpr const auto tt = sizeof(TT);
-	Hash<TT, int, 100>().Add(TT{1,2,3}, 1);
+	Hash<TT, int, 100>().Add(TT{ 1,2,3 }, 1);
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
