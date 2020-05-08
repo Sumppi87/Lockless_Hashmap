@@ -10,20 +10,6 @@ static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 #define C17 __cplusplus >= 201703L
 #define C14 __cplusplus >= 201402L
 
-constexpr static size_t ComputeHashKeyCount(const size_t count)
-{
-	size_t v = count;
-
-	v--;
-	v |= v >> 1;
-	v |= v >> 2;
-	v |= v >> 4;
-	v |= v >> 8;
-	v |= v >> 16;
-	v++;
-	return v;
-}
-
 template <typename K>
 size_t hash(const K& k);
 
@@ -36,6 +22,19 @@ template<typename K,
 	class Hash
 {
 private:
+	constexpr static size_t ComputeHashKeyCount(const size_t count)
+	{
+		size_t v = count;
+
+		v--;
+		v |= v >> 1;
+		v |= v >> 2;
+		v |= v >> 4;
+		v |= v >> 8;
+		v |= v >> 16;
+		v++;
+		return v;
+	}
 
 	constexpr static const size_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS * 2);
 	constexpr static const size_t MASK = KEY_COUNT - 1;

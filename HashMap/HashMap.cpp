@@ -29,17 +29,57 @@ static Hash<int, std::string, 100000> V;
 
 int main()
 {
+
 	{
-		MultiHash<int, int, 110> i;
+		MultiHash_S<int, int, 10191> i;
 		i.Add(100, 12);
 		i.Add(100, 13);
 		i.Add(100, 15);
-		i.Add(100, 16);
+		i.Add(100, 17);
+		i.Add(100, 17);
 		i.Add(100, 17);
 		i.Add(84548, 17);
 		i.Add(100, 20);
-		int a[5] = {0};
-		auto c = i.Get(100, a, 5);
+		int a[5] = { 0 };
+		auto c = i.Get(100, a, 7);
+		auto cc = i.Count(100);
+		const auto t = i.Get(84548);
+		c = c;
+	}
+	{
+		MultiHash_H<int, int> i(10191);
+		i.Add(100, 12);
+		i.Add(100, 13);
+		i.Add(100, 15);
+		i.Add(100, 17);
+		i.Add(100, 17);
+		i.Add(100, 17);
+		i.Add(84548, 17);
+		i.Add(100, 20);
+		int a[5] = { 0 };
+		auto c = i.Get(100, a, 7);
+		auto cc = i.Count(100);
+		const auto t = i.Get(84548);
+		c = c;
+	}
+	{
+		constexpr size_t max_elements = 10191;
+		typedef BucketT<int, int> Bucket;
+		uint8_t storage[sizeof(Bucket) * max_elements]{ 0 };
+		uint8_t hash[sizeof(std::atomic<Bucket*>*) * MultiHash<int, int>::ComputeHashKeyCount(max_elements * 2)]{ 0 };
+
+		MultiHash<int, int> i((std::atomic<Bucket*>*)&hash, (Bucket*)&storage, max_elements);
+		i.Add(100, 12);
+		i.Add(100, 13);
+		i.Add(100, 15);
+		i.Add(100, 17);
+		i.Add(100, 17);
+		i.Add(100, 17);
+		i.Add(84548, 17);
+		i.Add(100, 20);
+		int a[5] = { 0 };
+		auto c = i.Get(100, a, 7);
+		auto cc = i.Count(100);
 		const auto t = i.Get(84548);
 		c = c;
 	}

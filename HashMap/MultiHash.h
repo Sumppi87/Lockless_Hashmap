@@ -10,12 +10,31 @@ static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 template <typename K>
 size_t hash(const K& k);
 
+template<typename K, typename V>
+class BucketT
+{
+public:
+	BucketT() :
+		h(),
+		k(),
+		v(),
+		in_use(false)
+	{
+	}
+
+	// Hash-value of this bucket
+	size_t h;
+	K k;
+	V v;
+
+	std::atomic_bool in_use;
+};
+
 template<typename K,
-	typename V,
-	size_t MAX_ELEMENTS>
+	typename V>
 	class MultiHash
 {
-private:
+public:
 	constexpr static size_t ComputeHashKeyCount(const size_t count)
 	{
 		size_t v = count;
@@ -30,33 +49,17 @@ private:
 		return v;
 	}
 
-	constexpr static const size_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS * 2);
-
-	template<typename K, typename V>
-	class BucketT
-	{
-	public:
-		BucketT() :
-			h(),
-			k(),
-			v(),
-			in_use(false)
-		{
-		}
-
-		// Hash-value of this bucket
-		size_t h;
-		K k;
-		V v;
-
-		std::atomic_bool in_use;
-	};
 	typedef BucketT<K, V> Bucket;
 
-public:
-	MultiHash()
-		: m_hash{ nullptr }
-		, m_storage()
+	MultiHash(std::atomic<Bucket*>* pHash, Bucket* pStorage, const size_t max_elements)
+		: m_hash(pHash)
+		, m_storage(pStorage)
+		, MAX_ELEMENTS(max_elements)
+		, KEY_COUNT(ComputeHashKeyCount(max_elements * 2))
+	{
+	}
+
+	virtual ~MultiHash()
 	{
 	}
 
@@ -125,6 +128,25 @@ public:
 		return ret;
 	}
 
+	const size_t Count(const K& k) const
+	{
+		size_t ret = 0;
+
+		const size_t h = hash(k);
+		const size_t index = h % KEY_COUNT;
+
+		for (size_t i = 0; i < KEY_COUNT; ++i)
+		{
+			const size_t actualIdx = (index + i) % KEY_COUNT;
+			const Bucket* pHash = m_hash[actualIdx];
+			if (pHash == nullptr)
+				break;
+
+			if (pHash->k == k)
+				++ret;
+		}
+		return ret;
+	}
 private:
 	Bucket* GetNextFreeBucket()
 	{
@@ -145,6 +167,62 @@ private:
 	}
 
 private:
+	Bucket* m_storage;
+	std::atomic<Bucket*>* m_hash;
+	const size_t KEY_COUNT;
+	const size_t MAX_ELEMENTS;
+};
+
+template<typename K,
+	typename V,
+	size_t MAX_ELEMENTS>
+	class MultiHash_S : public MultiHash<K, V>
+{
+private:
+	typedef MultiHash<K, V> Base;
+	typedef BucketT<K, V> Bucket;
+	constexpr static const size_t KEY_COUNT = Base::ComputeHashKeyCount(MAX_ELEMENTS * 2);
+
+public:
+	MultiHash_S()
+		: m_storage()
+		, m_hash()
+		, Base(&m_hash[0], &m_storage[0], MAX_ELEMENTS)
+	{
+	}
+
+	~MultiHash_S() override
+	{
+	}
+
+private:
 	Bucket m_storage[MAX_ELEMENTS];
 	std::atomic<Bucket*> m_hash[KEY_COUNT];
+};
+
+template<typename K,
+	typename V>
+	class MultiHash_H : public MultiHash<K, V>
+{
+	typedef MultiHash<K, V> Base;
+	typedef BucketT<K, V> Bucket;
+
+public:
+	MultiHash_H(const size_t max_elements)
+		: Base(
+			m_hash = new std::atomic<Bucket*>[Base::ComputeHashKeyCount(max_elements * 2)](),
+			m_storage = new Bucket[max_elements](),
+			max_elements)
+	{
+	}
+
+	~MultiHash_H() override
+	{
+		delete[] m_hash;
+		delete[] m_storage;
+	}
+
+private:
+	std::atomic<Bucket*>* m_hash;
+	Bucket* m_storage;
 };
