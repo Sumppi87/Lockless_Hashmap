@@ -1,9 +1,14 @@
 #pragma once
 #include <atomic>
+#include <type_traits>
 #include <intrin.h>
 
 #pragma intrinsic(_BitScanReverse)
 
+static_assert(__cplusplus >= 201103L, "C++11 or later required!");
+
+#define C17 __cplusplus == 201703L
+#define C14 ((__cplusplus == 201402L) || C17)
 
 template <typename K>
 size_t hash(const K& k);
@@ -63,7 +68,41 @@ private:
 	};
 	typedef HashKeyT<K, V>  HashKey;
 
+	constexpr static const bool _K = std::is_trivially_copyable<K>::value;
+	constexpr static const bool _V = std::is_trivially_copyable<V>::value;
+
 public:
+	enum class FeatureSet : uint32_t
+	{
+		CONCURRENT_READ = 1 << 0,
+		CONCURRENT_WRITE_MULTIMAP = CONCURRENT_READ << 1, // Duplicate keys are not replaced
+		CONCURRENT_WRITE_REPLACE = CONCURRENT_WRITE_MULTIMAP << 1, // Duplicate keys are not replaced
+		CONCURRENT_REMOVAL = CONCURRENT_WRITE_REPLACE << 1,
+	};
+
+	constexpr static uint32_t GetFeatures()
+	{
+		uint32_t ret = 0;
+		ret |= (uint32_t)FeatureSet::CONCURRENT_READ;
+		ret |= (uint32_t)FeatureSet::CONCURRENT_WRITE_MULTIMAP;
+#if C17
+		if constexpr (_K && _V)
+		{
+			ret |= (uint32_t)FeatureSet::CONCURRENT_WRITE_REPLACE;
+			ret |= (uint32_t)FeatureSet::CONCURRENT_REMOVAL;
+		}
+#endif
+		return ret;
+	}
+	constexpr static const uint32_t _features = GetFeatures();
+
+	constexpr static bool IsFeatureSupported(const FeatureSet feature)
+	{
+		return (_features & (uint32_t)feature) == (uint32_t)feature;
+	}
+
+	constexpr static const bool _removal = IsFeatureSupported(FeatureSet::CONCURRENT_REMOVAL);
+
 	Hash()
 		: m_hash{ nullptr }
 		, m_recycle{ nullptr }
@@ -98,15 +137,23 @@ public:
 				// Found an empty bucket, and stored the data
 				break;
 			}
+#if C17
+			// requires C++17
+
 			// Key-collision, or key alreay stored
-			else if (pNull->k == k)
+			else if constexpr (_K)
 			{
+				if constexpr (_K)
+				{
+
+				}
 				if (m_hash[actualIdx].compare_exchange_strong(pNull, pBucket))
 				{
 					FreeNode(pNull);
 					break;
 				} // else key was already replaced
 			}
+#endif // 201703L
 		}
 	}
 
@@ -179,5 +226,4 @@ private:
 	constexpr static const size_t _recycle = sizeof(m_recycle);
 	constexpr static const size_t _storage = sizeof(m_storage);
 	constexpr static const size_t _key = sizeof(HashKey);
-
 };

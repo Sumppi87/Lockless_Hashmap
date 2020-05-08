@@ -2,12 +2,32 @@
 //
 
 #include <iostream>
+#include <string>
 #include "Hash.h"
+
+template <>
+size_t hash(const int& k)
+{
+	return k;
+}
+
+static Hash<int, std::string, 100000> V;
 
 int main()
 {
 	Hash<int, int, 100> t;
-    std::cout << "Hello World!\n";
+	constexpr auto t_ = sizeof(t);
+	Hash<int, std::string, 1000> v;
+	constexpr auto v_ = sizeof(v);
+	t.Add(rand(), 2);
+	int a = 2;
+	int b = 3;
+	t.Add(rand(), 2);
+	v.Add(rand(), "");
+	std::string s("Test");
+	v.Add(7, s);
+	std::string test = v.Value(7);
+	std::cout << "Hello World!\n";
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
