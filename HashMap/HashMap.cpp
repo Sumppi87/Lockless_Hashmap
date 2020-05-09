@@ -5,6 +5,7 @@
 #include <string>
 #include "Hash.h"
 #include "MultiHash.h"
+#include <chrono>
 
 template <>
 size_t hash(const int& k, const size_t seed)
@@ -49,9 +50,48 @@ static MultiHash_S<TT, std::string, 1000> V;
 
 int main()
 {
+	{
+		MultiHash_S<int, int, 912> test;
+		auto start = std::chrono::steady_clock::now();
+		test.Add(181, 1);
+		test.Add(191, 1);
+		test.Add(201, 1);
+		test.Add(211, 1);
+		test.Add(221, 1);
+		auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start);
+		std::cout << duration.count();
+		//return test.Count(181) + test.Count(191) + test.Count(201) + test.Count(211) + test.Count(221);
+	}
+	{
+		MultiHash_S<const char*, int, 912> i;
+		i.Add("Message from Hash", 7);
+		i.Add("Message from Hash2", 17);
+		int val = i.Get("Message from Hash");
+		int val2 = i.Get("Message from Hash2");
+		val = val;
 
+	}
 	{
-		MultiHash_S<int, int, 10191> i;
+		MultiHash_S<std::string, int, 9172> i;
+		i.Add("Message from Hash", 7);
+		i.Add("Message from Hash2", 17);
+		int val = i.Get("Message from Hash");
+		int val2 = i.Get("Message from Hash2");
+		val = val;
+
+	}
+	{
+		V.Add({ 1, 2, 3 }, "Message from Hash");
+		V.Add({ 3, 1, 2 }, "Message from Hash_2");
+		V.Add({ 3, 2, 1 }, "Message from Hash_3");
+		std::string test = V.Get({ 1, 2, 3 });
+		std::string test2 = V.Get({ 3, 1, 2 });
+		std::string test3 = V.Get({ 3, 2, 1 });
+		auto t = test.size();
+	}
+	{
+		MultiHash_S<int, int, 9172> i;
+		constexpr auto size = sizeof(i) / 1024;
 		i.Add(100, 12);
 		i.Add(100, 13);
 		i.Add(100, 15);
@@ -67,7 +107,8 @@ int main()
 		c = c;
 	}
 	{
-		MultiHash_H<int, int> i(10191);
+		MultiHash_H<int, int> i(9172);
+		constexpr auto size = sizeof(i);
 		i.Add(100, 12);
 		i.Add(100, 13);
 		i.Add(100, 15);
@@ -83,12 +124,15 @@ int main()
 		c = c;
 	}
 	{
-		constexpr size_t max_elements = 10191;
 		typedef BucketT<int, int> Bucket;
+		constexpr size_t max_elements = 12;
+		constexpr size_t hash_size = sizeof(std::atomic<Bucket*>*) * MultiHash<int, int>::ComputeHashKeyCount(max_elements);
 		uint8_t storage[sizeof(Bucket) * max_elements]{ 0 };
-		uint8_t hash[sizeof(std::atomic<Bucket*>*) * MultiHash<int, int>::ComputeHashKeyCount(max_elements * 2)]{ 0 };
+		uint8_t hash[hash_size]{ 0 };
 
 		MultiHash<int, int> i((std::atomic<Bucket*>*)&hash, (Bucket*)&storage, max_elements);
+
+		constexpr auto size = sizeof(i);
 		i.Add(100, 12);
 		i.Add(100, 13);
 		i.Add(100, 15);
@@ -117,7 +161,7 @@ int main()
 	std::string s("Test");
 	v.Add(29382, s);
 	v.Add(93932, "Test 2");
-	std::string test = v.Get(29382);
+	std::string test = v.Take(29382);
 	std::cout << "Hello World!\n";
 
 	constexpr const auto tt = sizeof(TT);

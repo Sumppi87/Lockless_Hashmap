@@ -1,19 +1,13 @@
 #pragma once
 #include <atomic>
 #include <type_traits>
-#include <intrin.h>
 #include <random> 
 #include "HashFunctions.h"
-
-#pragma intrinsic(_BitScanReverse)
 
 static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 
 #define C17 __cplusplus >= 201703L
 #define C14 __cplusplus >= 201402L
-
-template <typename K>
-size_t hash(const K& k, const size_t seed);
 
 const size_t MIN_COLLISION_SIZE = 1;
 
@@ -24,6 +18,7 @@ template<typename K,
 	class Hash
 {
 private:
+	constexpr static const int BUCKET_RELEASED = INT_MIN / 2;
 	static size_t GenerateSeed()
 	{
 		std::random_device rd{};
@@ -67,7 +62,7 @@ private:
 		KeyValueT() :
 			k(),
 			v(),
-			recycled(true),
+			//recycled(true),
 			access_counter(0)
 		{
 
@@ -75,6 +70,12 @@ private:
 
 		union Key
 		{
+			const Key& Set(const K& k)
+			{
+				this->k = k;
+				return *this;
+			}
+
 			uint64_t combined;
 			struct
 			{
@@ -87,16 +88,17 @@ private:
 			};
 		};
 
-		std::atomic<Key> k;
+		std::atomic<K> k;
 		V v; // value
-		std::atomic_bool recycled;
+		//std::atomic_bool recycled;
 		std::atomic<int> access_counter;
 
 		void Reset()
 		{
-			k = Key();
+			//k = Key();
+			k = K();
 			v = V();
-			recycled = false;
+			//recycled = false;
 			access_counter = 0;
 		}
 
@@ -107,13 +109,30 @@ private:
 	template<typename K, typename V>
 	class BucketT
 	{
+		template <typename T>
+		struct RefCounter
+		{
+			RefCounter(std::atomic<T>& c)
+				: counter(c)
+				, counterVal(++c)
+			{
+			}
+
+			~RefCounter()
+			{
+				--counter;
+			}
+
+			std::atomic<T>& counter;
+			const T counterVal;
+		};
 	public:
 		BucketT() :
 			h(),
-			bucket{ nullptr },
-			usage_counter(INT_MIN)
+			m_bucket{ nullptr },
+			m_usageCounter(BUCKET_RELEASED),
+			m_accessCounter(0)
 		{
-
 		}
 
 		// Hash-value of this bucket
@@ -121,76 +140,90 @@ private:
 
 		void Add(KeyValue* pKeyValue)
 		{
-			const int usage_now = ++usage_counter;
-			if (usage_now >= COLLISION_SIZE)
+			RefCounter c(m_usageCounter);
+			const int usage_now = ++m_usageCounter;
+			if (usage_now > COLLISION_SIZE)
 			{
 				// Bucket is full
-				--usage_counter;
+				--m_usageCounter;
 				throw std::bad_alloc();
 			}
+			++m_accessCounter;
 
+			bool item_added = false;
 			for (size_t i = 0; i < COLLISION_SIZE; ++i)
 			{
 				KeyValue* pExpected = nullptr;
-				if (bucket[i].compare_exchange_strong(pExpected, pKeyValue))
+				if (m_bucket[i].compare_exchange_strong(pExpected, pKeyValue))
 				{
+					item_added = true;
 					break;
 				} // else index already in use
 			}
+			
 
+			--m_accessCounter;
+			if (!item_added)
+			{
+				--m_usageCounter;
+				throw std::bad_alloc();
+			}
 		}
 
-		bool TakeValue(const K& k, KeyValue** ppKeyValue)
+		bool TakeValue(const K& k, KeyValue** ppKeyValue, bool& bucketReleased)
 		{
-			bool bucketReleased = false;
+			const int accessCount = ++m_accessCounter;
+			if (accessCount < 0)
+				return false;
 
 			for (size_t i = 0; i < COLLISION_SIZE; ++i)
 			{
-				KeyValue* pCandidate = bucket[i];
+				// Check if Bucket was emptied/released while accessing
+				if (m_usageCounter < 0)
+				{
+					break;
+				}
+
+				KeyValue* pCandidate = m_bucket[i];
 				if (pCandidate == nullptr)
 				{
 					continue;
 				}
-				/*else if (pCandidate->access_counter++;
-					pCandidate->recycled)
+				else if (K _k = k; pCandidate->k.compare_exchange_strong(_k, K()))
 				{
-					pCandidate->access_counter--;
-					continue;
-				}*/
-				else
-				{
-					/*K def = K();
-					if (pCandidate->k.compare_exchange_strong(def, )
+					if (!m_bucket[i].compare_exchange_strong(pCandidate, nullptr))
 					{
-
-					}*/
+						// This shouldn't be possible
+						throw std::logic_error("HashMap went booboo");
+					}
+					*ppKeyValue = pCandidate;
+					--m_usageCounter;
+					break;
 				}
 			}
-			return bucketReleased;
+
+			// Try releasing the bucket
+			bucketReleased = ReleaseBucket();
+			--m_accessCounter;
+			return true;
 		}
 
 		void Reset()
 		{
-			//k = K();
-			//v = V();
 			h = size_t();
-			usage_counter = 0;
+			m_usageCounter = 0;
 		}
 
 		bool ReleaseBucket()
 		{
 			int usage = 0;
-			if (usage_counter.compare_exchange_strong(0, INT_MIN))
-			{
-				ReleaseNode(this);
-				// Bucket is now released
-			}
+			return m_usageCounter.compare_exchange_strong(usage, BUCKET_RELEASED);
 		}
 
 	private:
-		std::atomic<KeyValue*> bucket[COLLISION_SIZE];
-
-		std::atomic<int> usage_counter;
+		std::atomic<KeyValue*> m_bucket[COLLISION_SIZE];
+		std::atomic<int> m_usageCounter; // Keys in bucket
+		std::atomic<uint16_t> m_accessCounter; // Accessing threads in this bucket
 	};
 	typedef BucketT<K, V> Bucket;
 
@@ -257,47 +290,40 @@ public:
 			return;
 		KeyValue* pKeyValue = GetNextFreeKeyValue();
 		pNewBucket->h = h;
+		pKeyValue->v = v;
+		pKeyValue->k = k;
+		//pKeyValue->k = KeyValue::Key{}.Set(k);
 		//pBucket->k = k;
 		//pBucket->v = v;
 		pNewBucket->Add(pKeyValue);
 
-		Bucket* pNull = nullptr;
+		Bucket* pExpected = nullptr;
 		for (size_t i = 0; i < KEY_COUNT; ++i)
 		{
 			const size_t actualIdx = (index + i) % KEY_COUNT;
-			if (m_hash[actualIdx].compare_exchange_strong(pNull, pNewBucket))
+			if (m_hash[actualIdx].compare_exchange_strong(pExpected, pNewBucket))
 			{
 				// Found an empty bucket, and stored the data
 				break;
 			}
-#if C17
-			// requires C++17
-
-			// Key-collision, or key alreay stored
-			else if constexpr (_K)
+			else // Bucket already exists, store the data there
 			{
-				if constexpr (_K)
-				{
-
-				}
-				if (m_hash[actualIdx].compare_exchange_strong(pNull, pNewBucket))
-				{
-					ReleaseNode(pNull);
-					break;
-				} // else key was already replaced
+				// compare_exchange stores the
+				if (pExpected == nullptr)
+					throw std::logic_error("HashMap went booboo");
+				pExpected->Add(pKeyValue);
 			}
-#endif // 201703L
 		}
 	}
 
-	const V Get(const K& k)
+	const V Take(const K& k)
 	{
 		V ret = V();
 
 		const size_t h = hash(k, seed);
 		const size_t index = h % KEY_COUNT;
 
-		/*Bucket* pNull = nullptr;
+		//Bucket* pNull = nullptr;
 		for (size_t i = 0; i < KEY_COUNT; ++i)
 		{
 			const size_t actualIdx = (index + i) % KEY_COUNT;
@@ -305,35 +331,21 @@ public:
 			if (pHash != nullptr)
 			{
 				// increment access counter to notify possible other threads that acces is ongoing
-				pHash->access_counter.fetch_add(1);
-
-				if (pHash->h != h)
+				KeyValue* pKeyValue = nullptr;
+				bool bucketReleased = false;
+				if (pHash->TakeValue(k, &pKeyValue, bucketReleased))
 				{
-					pHash->access_counter.fetch_sub(1);
-					break;
+					// Value was found
+					ret = pKeyValue->v;
 				}
 
-				// Check that the item hasn't been recycled (i.e. removed from map in the mean time)
-				if (pHash->recycled == false)
+				if (bucketReleased)
 				{
-					if (pHash->k == k)
-					{
-						ret = pHash->v;
-						if (pHash->recycled)
-						{
-							ret = V();
-						}
-						break;
-					}
-
+					// Bucket was released
 				}
-				else
-				{
-					// Item was removed while accessing it, discard value;
-					pHash->access_counter.fetch_sub(1);
-				}
+				break;
 			}
-		}*/
+		}
 		return ret;
 	}
 
@@ -344,6 +356,8 @@ private:
 		for (size_t i = 0; i < KEY_COUNT; ++i)
 		{
 			Bucket* pExpected = m_recycleBuckets[i];
+			if (pExpected == nullptr)
+				continue; // already taken
 			if (m_recycleBuckets[i].compare_exchange_strong(pExpected, nullptr))
 			{
 				pExpected->Reset();
@@ -360,6 +374,8 @@ private:
 		for (size_t i = 0; i < KEY_COUNT; ++i)
 		{
 			KeyValue* pExpected = m_recycle[i];
+			if (pExpected == nullptr)
+				continue;
 			if (m_recycle[i].compare_exchange_strong(pExpected, nullptr))
 			{
 				pExpected->Reset();
@@ -376,6 +392,18 @@ private:
 		{
 			Bucket* pNull = nullptr;
 			if (m_recycleBuckets[i].compare_exchange_strong(pNull, pBucket))
+			{
+				break;
+			}
+		}
+	}
+
+	void ReleaseNode(KeyValue* pKeyValue)
+	{
+		for (size_t i = 0; i < KEY_COUNT; ++i)
+		{
+			KeyValue* pNull = nullptr;
+			if (m_recycle[i].compare_exchange_strong(pNull, pKeyValue))
 			{
 				break;
 			}
