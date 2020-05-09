@@ -3,6 +3,7 @@
 #include <type_traits>
 #include <random> 
 #include "HashFunctions.h"
+#include <assert.h>
 
 static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 
@@ -10,6 +11,27 @@ static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 #define C14 __cplusplus >= 201402L
 
 const size_t MIN_COLLISION_SIZE = 8;
+
+template<typename T, size_t SIZE>
+struct Table
+{
+	inline T& operator[](const size_t idx) noexcept
+	{
+#ifdef _DEBUG
+		assert(idx < SIZE);
+#endif // DEBUG
+		return _array[idx];
+	}
+	inline const T& operator[](const size_t idx) const noexcept
+	{
+#ifdef _DEBUG
+		assert(idx < SIZE);
+#endif // DEBUG
+		return _array[idx];
+	}
+
+	T _array[SIZE];
+};
 
 template<typename K,
 	typename V,
@@ -54,48 +76,46 @@ private:
 	constexpr static const size_t MASK = KEY_COUNT - 1;
 	constexpr static const size_t COLLISION_SIZE = COLLISION_SIZE_HINT > MIN_COLLISION_SIZE ? COLLISION_SIZE_HINT : MIN_COLLISION_SIZE;
 
-	union KeyHashPair
+	struct KeyHashPair
 	{
-		uint64_t combined;
-		struct
-		{
-			size_t hash;
-			K key;
-			static_assert((sizeof(K) + sizeof(size_t)) <= sizeof(uint64_t), "Type K is larger than supported 32 bits/4 bytes");
-		};
+		size_t hash;
+		K key;
 
-		KeyHashPair& SetKeyHash(const K& k, const size_t h)
+		__declspec(deprecated("** sizeof(K) is too large for lockless access"
+			", suppress this warning to continue **"))
+			static constexpr void NotLockFree() {}
+		static constexpr bool IsLockFree()
 		{
-			key = k;
-			hash = h;
-			return *this;
+			if constexpr (sizeof(KeyHashPair) > 8)
+			{
+				NotLockFree();
+				return false;
+			}
+			return true;
 		}
 	};
 
+	constexpr static const bool IS_LOCK_FREE = KeyHashPair::IsLockFree();
+
 	template<typename K, typename V>
-	class KeyValueT
+	struct KeyValueT
 	{
-	public:
 		KeyValueT() :
 			k(),
-			v(),
-			recycled(true)
+			v()
 		{
 		}
 
 		std::atomic<KeyHashPair> k;
 		V v; // value
-		std::atomic_bool recycled;
 
 		void Reset()
 		{
 			k = KeyHashPair();
 			v = V();
-			recycled = false;
 		}
-
-	private:
 	};
+
 	typedef KeyValueT<K, V> KeyValue;
 
 	template<typename K, typename V>
@@ -154,7 +174,7 @@ private:
 				{
 					continue;
 				}
-				else if (KeyHashPair kp = KeyHashPair().SetKeyHash(k, hash); pCandidate->k.compare_exchange_strong(kp, KeyHashPair()))
+				else if (KeyHashPair kp{ hash, k }; pCandidate->k.compare_exchange_strong(kp, KeyHashPair()))
 				{
 					if (!m_bucket[i].compare_exchange_strong(pCandidate, nullptr))
 					{
@@ -170,7 +190,7 @@ private:
 		}
 
 	private:
-		std::atomic<KeyValue*> m_bucket[COLLISION_SIZE];
+		Table<std::atomic<KeyValue*>, COLLISION_SIZE> m_bucket;
 		std::atomic<size_t> m_usageCounter; // Keys in bucket
 	};
 	typedef BucketT<K, V> Bucket;
@@ -198,7 +218,7 @@ public:
 
 		KeyValue* pKeyValue = GetNextFreeKeyValue();
 		pKeyValue->v = v;
-		pKeyValue->k = KeyHashPair().SetKeyHash(k, h);
+		pKeyValue->k = KeyHashPair{ h, k };
 
 		m_hash[index].Add(pKeyValue);
 	}
@@ -209,21 +229,13 @@ public:
 
 		const size_t h = hash(k, seed);
 		const size_t index = h % KEY_COUNT;
-
-		//Bucket* pNull = nullptr;
-		for (size_t i = 0; i < KEY_COUNT; ++i)
+		KeyValue* pKeyValue = nullptr;
+		if (m_hash[index].TakeValue(k, h, &pKeyValue))
 		{
-			const size_t actualIdx = (index + i) % KEY_COUNT;
-			// increment access counter to notify possible other threads that acces is ongoing
-			KeyValue* pKeyValue = nullptr;
-			if (m_hash[actualIdx].TakeValue(k, h, &pKeyValue))
-			{
-				// Value was found
-				ret = pKeyValue->v;
+			// Value was found
+			ret = pKeyValue->v;
 
-				ReleaseNode(pKeyValue);
-			}
-			break;
+			ReleaseNode(pKeyValue);
 		}
 		return ret;
 	}
@@ -264,10 +276,10 @@ private:
 	}
 
 private:
-	Bucket m_hash[KEY_COUNT];
-	KeyValue m_keyStorage[MAX_ELEMENTS];
+	Table<Bucket, KEY_COUNT> m_hash;
+	Table<KeyValue, MAX_ELEMENTS> m_keyStorage;
 
-	std::atomic<KeyValue*> m_recycle[MAX_ELEMENTS];
+	Table<std::atomic<KeyValue*>, MAX_ELEMENTS> m_recycle;
 	std::atomic<size_t> m_usedNodes;
 
 	const size_t seed;

@@ -7,6 +7,7 @@
 #include "MultiHash.h"
 #include <chrono>
 
+
 template <>
 size_t hash(const int& k, const size_t seed)
 {
@@ -101,7 +102,7 @@ int main()
 		i.Add(84548, 17);
 		i.Add(100, 20);
 		int a[5] = { 0 };
-		auto c = i.Get(100, a, 7);
+		auto c = i.Get(100, a, 5);
 		auto cc = i.Count(100);
 		const auto t = i.Get(84548);
 		c = c;
@@ -118,12 +119,12 @@ int main()
 		i.Add(84548, 17);
 		i.Add(100, 20);
 		int a[5] = { 0 };
-		auto c = i.Get(100, a, 7);
+		auto c = i.Get(100, a, 5);
 		auto cc = i.Count(100);
 		const auto t = i.Get(84548);
 		c = c;
 	}
-	/*{
+	{
 		typedef BucketT<int, int> Bucket;
 		constexpr size_t max_elements = 12;
 		constexpr size_t hash_size = sizeof(std::atomic<Bucket*>*) * MultiHash<int, int>::ComputeHashKeyCount(max_elements);
@@ -147,14 +148,12 @@ int main()
 		const auto t = i.Get(84548);
 		c = c;
 	}
-	*/
 	{
 		Hash<int, int, 100> t;
 		constexpr auto t_ = sizeof(t);
 		Hash<int, std::string, 1000> v;
 		constexpr auto v_ = sizeof(v);
 		t.Add(rand(), 2);
-		int a = 2;
 		int b = 3;
 		t.Add(rand(), 2);
 		v.Add(rand(), "");
