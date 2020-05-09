@@ -1,14 +1,13 @@
 #pragma once
 #include <atomic>
 #include <type_traits>
+#include <random> 
+#include "Hashfunctions.h"
 
 static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 
 #define C17 __cplusplus >= 201703L
 #define C14 __cplusplus >= 201402L
-
-template <typename K>
-size_t hash(const K& k);
 
 template<typename K, typename V>
 class BucketT
@@ -34,10 +33,27 @@ template<typename K,
 	typename V>
 	class MultiHash
 {
+	static size_t GenerateSeed()
+	{
+		std::random_device rd{};
+
+		// Use Mersenne twister engine to generate pseudo-random numbers.
+		if constexpr (sizeof(size_t) == 4)
+		{
+			std::mt19937 engine{ rd() };
+			return engine();
+		}
+		else if constexpr (sizeof(size_t) == 8)
+		{
+			std::mt19937_64 engine{ rd() };
+			return engine();
+		}
+		else { static_assert(false, "Unsupported platform"); }
+	}
 public:
 	constexpr static size_t ComputeHashKeyCount(const size_t count)
 	{
-		size_t v = count;
+		size_t v = count * 2;
 
 		v--;
 		v |= v >> 1;
@@ -55,7 +71,8 @@ public:
 		: m_hash(pHash)
 		, m_storage(pStorage)
 		, MAX_ELEMENTS(max_elements)
-		, KEY_COUNT(ComputeHashKeyCount(max_elements * 2))
+		, KEY_COUNT(ComputeHashKeyCount(max_elements))
+		, seed(GenerateSeed())
 	{
 	}
 
@@ -65,7 +82,7 @@ public:
 
 	void Add(const K& k, const V& v)
 	{
-		const size_t h = hash(k);
+		const size_t h = hash(k, seed);
 		const size_t index = h % KEY_COUNT;
 
 		Bucket* pBucket = GetNextFreeBucket();
@@ -87,7 +104,7 @@ public:
 
 	V Get(const K& k) const
 	{
-		const size_t h = hash(k);
+		const size_t h = hash(k, seed);
 		const size_t index = h % KEY_COUNT;
 
 		for (size_t i = 0; i < KEY_COUNT; ++i)
@@ -109,7 +126,7 @@ public:
 	{
 		size_t ret = 0;
 
-		const size_t h = hash(k);
+		const size_t h = hash(k, seed);
 		const size_t index = h % KEY_COUNT;
 
 		for (size_t i = 0; i < KEY_COUNT; ++i)
@@ -132,7 +149,7 @@ public:
 	{
 		size_t ret = 0;
 
-		const size_t h = hash(k);
+		const size_t h = hash(k, seed);
 		const size_t index = h % KEY_COUNT;
 
 		for (size_t i = 0; i < KEY_COUNT; ++i)
@@ -171,6 +188,8 @@ private:
 	std::atomic<Bucket*>* m_hash;
 	const size_t KEY_COUNT;
 	const size_t MAX_ELEMENTS;
+
+	const size_t seed;
 };
 
 template<typename K,
@@ -181,7 +200,7 @@ template<typename K,
 private:
 	typedef MultiHash<K, V> Base;
 	typedef BucketT<K, V> Bucket;
-	constexpr static const size_t KEY_COUNT = Base::ComputeHashKeyCount(MAX_ELEMENTS * 2);
+	constexpr static const size_t KEY_COUNT = Base::ComputeHashKeyCount(MAX_ELEMENTS);
 
 public:
 	MultiHash_S()
@@ -196,7 +215,9 @@ public:
 	}
 
 private:
+	constexpr static const auto _bucket = sizeof(Bucket);
 	Bucket m_storage[MAX_ELEMENTS];
+	constexpr static const auto _storage = sizeof(m_storage);
 	std::atomic<Bucket*> m_hash[KEY_COUNT];
 };
 
@@ -210,7 +231,7 @@ template<typename K,
 public:
 	MultiHash_H(const size_t max_elements)
 		: Base(
-			m_hash = new std::atomic<Bucket*>[Base::ComputeHashKeyCount(max_elements * 2)](),
+			m_hash = new std::atomic<Bucket*>[Base::ComputeHashKeyCount(max_elements)](),
 			m_storage = new Bucket[max_elements](),
 			max_elements)
 	{
