@@ -7,9 +7,9 @@
 #include "MultiHash.h"
 
 template <>
-size_t hash(const int& k)
+size_t hash(const int& k, const size_t seed)
 {
-	return k;
+	return size_t(k) ^ seed;
 }
 
 struct TT
@@ -19,13 +19,33 @@ struct TT
 	uint8_t c;
 };
 
-template <>
-size_t hash(const TT& k)
+bool operator==(const TT& o, const TT& t)
 {
-	return k.a + (k.b << 16) | k.c;
+	return o.a == t.a && o.b == t.b && o.c == t.c;
 }
 
-static Hash<int, std::string, 100000> V;
+template <>
+size_t hash(const TT& k, const size_t seed)
+{
+	return size_t((k.b << (k.c^k.b)) ^ k.a) ^ seed;
+}
+
+template <>
+size_t hash(const std::string& s, const size_t seed)
+{
+#define FNV_PRIME_32         16777619
+#define FNV_OFFSET_BASIS_32  2166136261
+
+	uint32_t fnv = FNV_OFFSET_BASIS_32;
+	for (size_t i = 0; i < s.size(); ++i)
+	{
+		fnv = fnv ^ (s[i]);
+		fnv = fnv * FNV_PRIME_32;
+	}
+	return hash(fnv, seed);
+}
+
+static MultiHash_S<TT, std::string, 1000> V;
 
 int main()
 {

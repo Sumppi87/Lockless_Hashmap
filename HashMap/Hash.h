@@ -2,6 +2,8 @@
 #include <atomic>
 #include <type_traits>
 #include <intrin.h>
+#include <random> 
+#include "HashFunctions.h"
 
 #pragma intrinsic(_BitScanReverse)
 
@@ -11,7 +13,7 @@ static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 #define C14 __cplusplus >= 201402L
 
 template <typename K>
-size_t hash(const K& k);
+size_t hash(const K& k, const size_t seed);
 
 const size_t MIN_COLLISION_SIZE = 1;
 
@@ -22,9 +24,27 @@ template<typename K,
 	class Hash
 {
 private:
+	static size_t GenerateSeed()
+	{
+		std::random_device rd{};
+
+		// Use Mersenne twister engine to generate pseudo-random numbers.
+		if constexpr (sizeof(size_t) == 4)
+		{
+			std::mt19937 engine{ rd() };
+			return engine();
+		}
+		else if constexpr (sizeof(size_t) == 8)
+		{
+			std::mt19937_64 engine{ rd() };
+			return engine();
+		}
+		else { static_assert(0, "Unsupported platform"); }
+	}
+
 	constexpr static size_t ComputeHashKeyCount(const size_t count)
 	{
-		size_t v = count;
+		size_t v = count * 2;
 
 		v--;
 		v |= v >> 1;
@@ -36,7 +56,7 @@ private:
 		return v;
 	}
 
-	constexpr static const size_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS * 2);
+	constexpr static const size_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS);
 	constexpr static const size_t MASK = KEY_COUNT - 1;
 	constexpr static const size_t COLLISION_SIZE = COLLISION_SIZE_HINT > MIN_COLLISION_SIZE ? COLLISION_SIZE_HINT : MIN_COLLISION_SIZE;
 
@@ -214,6 +234,7 @@ public:
 		, m_recycleBuckets{ nullptr }
 		, m_recycle{ nullptr }
 		, m_storage()
+		, seed(GenerateSeed())
 	{
 		for (size_t i = 0; i < KEY_COUNT; ++i)
 		{
@@ -228,7 +249,7 @@ public:
 
 	void Add(const K& k, const V& v)
 	{
-		const size_t h = hash(k);
+		const size_t h = hash(k, seed);
 		const size_t index = h % KEY_COUNT;
 
 		Bucket* pNewBucket = GetNextFreeBucket();
@@ -273,7 +294,7 @@ public:
 	{
 		V ret = V();
 
-		const size_t h = hash(k);
+		const size_t h = hash(k, seed);
 		const size_t index = h % KEY_COUNT;
 
 		/*Bucket* pNull = nullptr;
@@ -368,6 +389,8 @@ private:
 	std::atomic<Bucket*> m_hash[KEY_COUNT];
 	std::atomic<Bucket*> m_recycleBuckets[KEY_COUNT];
 	std::atomic<KeyValue*> m_recycle[MAX_ELEMENTS];
+
+	const size_t seed;
 
 	constexpr static const size_t _hash = sizeof(m_hash);
 	constexpr static const size_t _recycle = sizeof(m_recycle);
