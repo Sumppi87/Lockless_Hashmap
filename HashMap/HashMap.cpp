@@ -16,7 +16,7 @@ size_t hash(const int& k, const size_t seed)
 struct TT
 {
 	uint16_t a;
-	uint16_t b;
+	uint8_t b;
 	uint8_t c;
 };
 
@@ -123,7 +123,7 @@ int main()
 		const auto t = i.Get(84548);
 		c = c;
 	}
-	{
+	/*{
 		typedef BucketT<int, int> Bucket;
 		constexpr size_t max_elements = 12;
 		constexpr size_t hash_size = sizeof(std::atomic<Bucket*>*) * MultiHash<int, int>::ComputeHashKeyCount(max_elements);
@@ -142,30 +142,43 @@ int main()
 		i.Add(84548, 17);
 		i.Add(100, 20);
 		int a[5] = { 0 };
-		auto c = i.Get(100, a, 7);
+		auto c = i.Get(100, a, 5);
 		auto cc = i.Count(100);
 		const auto t = i.Get(84548);
 		c = c;
 	}
-
-
-	Hash<int, int, 100> t;
-	constexpr auto t_ = sizeof(t);
-	Hash<int, std::string, 1000> v;
-	constexpr auto v_ = sizeof(v);
-	t.Add(rand(), 2);
-	int a = 2;
-	int b = 3;
-	t.Add(rand(), 2);
-	v.Add(rand(), "");
-	std::string s("Test");
-	v.Add(29382, s);
-	v.Add(93932, "Test 2");
-	std::string test = v.Take(29382);
+	*/
+	{
+		Hash<int, int, 100> t;
+		constexpr auto t_ = sizeof(t);
+		Hash<int, std::string, 1000> v;
+		constexpr auto v_ = sizeof(v);
+		t.Add(rand(), 2);
+		int a = 2;
+		int b = 3;
+		t.Add(rand(), 2);
+		v.Add(rand(), "");
+		std::string s("Test");
+		v.Add(29382, s);
+		v.Add(93932, "Test 2");
+		std::string test = v.Take(29382);
+	}
+	{
+		constexpr const auto tt = sizeof(TT);
+		Hash<TT, int, 100> a;
+		TT t1{ 1,2,3 };
+		TT t2{ 3,1,2 };
+		TT t3{ 1,3,2 };
+		TT t4{ 2,1,3 };
+		a.Add(t1, 1);
+		a.Add(t2, 2);
+		a.Add(t3, 3);
+		a.Add(t3, 4);
+		a.Add(t4, 5);
+		int t3_ = a.Take(t3);
+		t3_ = t3_;
+	}
 	std::cout << "Hello World!\n";
-
-	constexpr const auto tt = sizeof(TT);
-	Hash<TT, int, 100>().Add(TT{ 1,2,3 }, 1);
 }
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
