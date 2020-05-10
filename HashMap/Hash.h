@@ -1,10 +1,10 @@
 #pragma once
 #include <atomic>
 #include <type_traits>
-#include <random> 
-#include "HashFunctions.h"
 #include <assert.h>
 #include <functional>
+#include "HashFunctions.h"
+#include "HashUtils.h"
 
 static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 
@@ -13,27 +13,6 @@ static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 
 const size_t MIN_COLLISION_SIZE = 8;
 
-template<typename T, size_t SIZE>
-struct Array
-{
-	inline T& operator[](const size_t idx) noexcept
-	{
-#ifdef _DEBUG
-		assert(idx < SIZE);
-#endif // DEBUG
-		return _array[idx];
-	}
-	inline const T& operator[](const size_t idx) const noexcept
-	{
-#ifdef _DEBUG
-		assert(idx < SIZE);
-#endif // DEBUG
-		return _array[idx];
-	}
-
-	T _array[SIZE];
-};
-
 template<typename K,
 	typename V,
 	size_t MAX_ELEMENTS,
@@ -41,191 +20,15 @@ template<typename K,
 	class Hash
 {
 	static_assert(std::is_trivially_copyable<K>::value, "Template type K must be trivially copyable.");
+	typedef KeyHashPairT<K> KeyHashPair;
+	typedef KeyValueT<K, V> KeyValue;
+	typedef Hash<K, V, MAX_ELEMENTS, COLLISION_SIZE_HINT> H;
 
 private:
-	static size_t GenerateSeed()
-	{
-		std::random_device rd{};
-
-		// Use Mersenne twister engine to generate pseudo-random numbers.
-		if constexpr (sizeof(size_t) == 4)
-		{
-			std::mt19937 engine{ rd() };
-			return engine();
-		}
-		else if constexpr (sizeof(size_t) == 8)
-		{
-			std::mt19937_64 engine{ rd() };
-			return engine();
-		}
-		else { static_assert(0, "Unsupported platform"); }
-	}
-
-	constexpr static size_t ComputeHashKeyCount(const size_t count)
-	{
-		size_t v = count * 2;
-
-		v--;
-		v |= v >> 1;
-		v |= v >> 2;
-		v |= v >> 4;
-		v |= v >> 8;
-		v |= v >> 16;
-		v++;
-		return v;
-	}
-
 	constexpr static const size_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS);
 	constexpr static const size_t COLLISION_SIZE = COLLISION_SIZE_HINT > MIN_COLLISION_SIZE ? COLLISION_SIZE_HINT : MIN_COLLISION_SIZE;
-
-	struct KeyHashPair
-	{
-		size_t hash;
-		K key;
-
-		__declspec(deprecated("** sizeof(K) is too large for lockless access, suppress this warning to continue **"))
-			static constexpr bool NotLockFree() { return false; }
-		static constexpr bool IsLockFree()
-		{
-			if constexpr (sizeof(KeyHashPair) > 8) { return NotLockFree(); }
-			return true;
-		}
-	};
-
 	constexpr static const bool IS_LOCK_FREE = KeyHashPair::IsLockFree();
-
-	template<typename K, typename V>
-	struct KeyValueT
-	{
-		KeyValueT() :
-			k(),
-			v()
-		{
-		}
-
-		std::atomic<KeyHashPair> k;
-		V v; // value
-
-		void Reset()
-		{
-			k = KeyHashPair();
-			v = V();
-		}
-	};
-
-	typedef KeyValueT<K, V> KeyValue;
-
-	template<typename K, typename V>
-	class BucketT
-	{
-	public:
-		BucketT() :
-			m_bucket{ nullptr },
-			m_usageCounter(0)
-		{
-		}
-
-		void Add(KeyValue* pKeyValue)
-		{
-			const int usage_now = ++m_usageCounter;
-			if (usage_now > COLLISION_SIZE)
-			{
-				// Bucket is full
-				--m_usageCounter;
-				throw std::bad_alloc();
-			}
-
-			bool item_added = false;
-			for (size_t i = 0; i < COLLISION_SIZE; ++i)
-			{
-				KeyValue* pExpected = nullptr;
-				if (m_bucket[i].compare_exchange_strong(pExpected, pKeyValue))
-				{
-					item_added = true;
-					break;
-				} // else index already in use
-			}
-
-			if (!item_added)
-			{
-				--m_usageCounter;
-				throw std::bad_alloc();
-			}
-		}
-
-		bool TakeValue(const K& k, const size_t hash, KeyValue** ppKeyValue)
-		{
-			if (m_usageCounter == 0)
-				return false;
-
-			for (size_t i = 0; i < COLLISION_SIZE; ++i)
-			{
-				// Check if Bucket was emptied while accessing
-				if (m_usageCounter == 0)
-				{
-					return false;
-				}
-
-				KeyValue* pCandidate = m_bucket[i];
-				if (pCandidate == nullptr)
-				{
-					continue;
-				}
-				else if (KeyHashPair kp{ hash, k }; pCandidate->k.compare_exchange_strong(kp, KeyHashPair()))
-				{
-					if (!m_bucket[i].compare_exchange_strong(pCandidate, nullptr))
-					{
-						// This shouldn't be possible
-						throw std::logic_error("HashMap went booboo");
-					}
-					*ppKeyValue = pCandidate;
-					--m_usageCounter;
-					break;
-				}
-			}
-			return true;
-		}
-
-		void TakeValue(const K& k, const size_t hash, const std::function<bool(const V&)>& f, Hash* pHash)
-		{
-			if (m_usageCounter == 0)
-				return;
-
-			for (size_t i = 0; i < COLLISION_SIZE; ++i)
-			{
-				// Check if Bucket was emptied while accessing
-				if (m_usageCounter == 0)
-				{
-					break;
-				}
-
-				KeyValue* pCandidate = m_bucket[i];
-				if (pCandidate == nullptr)
-				{
-					continue;
-				}
-				else if (KeyHashPair kp{ hash, k }; pCandidate->k.compare_exchange_strong(kp, KeyHashPair()))
-				{
-					if (!m_bucket[i].compare_exchange_strong(pCandidate, nullptr))
-					{
-						// This shouldn't be possible
-						throw std::logic_error("HashMap went booboo");
-					}
-					--m_usageCounter;
-
-					if (!f(pCandidate->v))
-						break;
-
-					pHash->ReleaseNode(pCandidate);
-				}
-			}
-		}
-
-	private:
-		Array<std::atomic<KeyValue*>, COLLISION_SIZE> m_bucket;
-		std::atomic<size_t> m_usageCounter; // Keys in bucket
-	};
-	typedef BucketT<K, V> Bucket;
+	typedef BucketT<K, V, COLLISION_SIZE> Bucket;
 
 	constexpr static const bool _K = std::is_trivially_copyable<K>::value;
 	constexpr static const bool _V = std::is_trivially_copyable<V>::value;
@@ -272,11 +75,12 @@ public:
 		return ret;
 	}
 
-	void Take(const K& k, const std::function<bool(const V&)>& f)
+	void Take(const K& k, const std::function<bool(const V&)>& receiver)
 	{
 		const size_t h = hash(k, seed);
 		const size_t index = h % KEY_COUNT;
-		m_hash[index].TakeValue(k, h, f, this);
+		std::function<void(KeyValue*)> release = std::bind(&Hash::ReleaseNode, this, std::placeholders::_1);
+		m_hash[index].TakeValue(k, h, receiver, release);
 	}
 
 private:

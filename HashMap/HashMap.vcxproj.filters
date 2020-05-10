@@ -29,5 +29,8 @@
     <ClInclude Include="HashFunctions.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="HashUtils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

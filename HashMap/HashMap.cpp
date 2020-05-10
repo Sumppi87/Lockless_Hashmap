@@ -125,30 +125,6 @@ int main()
 		c = c;
 	}
 	{
-		typedef BucketT<int, int> Bucket;
-		constexpr size_t max_elements = 12;
-		constexpr size_t hash_size = sizeof(std::atomic<Bucket*>*) * MultiHash<int, int>::ComputeHashKeyCount(max_elements);
-		uint8_t storage[sizeof(Bucket) * max_elements]{ 0 };
-		uint8_t hash[hash_size]{ 0 };
-
-		MultiHash<int, int> i((std::atomic<Bucket*>*)&hash, (Bucket*)&storage, max_elements);
-
-		constexpr auto size = sizeof(i);
-		i.Add(100, 12);
-		i.Add(100, 13);
-		i.Add(100, 15);
-		i.Add(100, 17);
-		i.Add(100, 17);
-		i.Add(100, 17);
-		i.Add(84548, 17);
-		i.Add(100, 20);
-		int a[5] = { 0 };
-		auto c = i.Get(100, a, 5);
-		auto cc = i.Count(100);
-		const auto t = i.Get(84548);
-		c = c;
-	}
-	{
 		Hash<int, int, 100> t;
 		constexpr auto t_ = sizeof(t);
 		Hash<int, std::string, 1000> v;

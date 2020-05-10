@@ -164,6 +164,7 @@
   <ItemGroup>
     <ClInclude Include="Hash.h" />
     <ClInclude Include="HashFunctions.h" />
+    <ClInclude Include="HashUtils.h" />
     <ClInclude Include="MultiHash.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

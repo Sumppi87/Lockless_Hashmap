@@ -10,10 +10,10 @@ static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 #define C14 __cplusplus >= 201402L
 
 template<typename K, typename V>
-class BucketT
+class BucketItem
 {
 public:
-	BucketT() :
+	BucketItem() :
 		h(),
 		k(),
 		v(),
@@ -65,9 +65,9 @@ public:
 		return v;
 	}
 
-	typedef BucketT<K, V> Bucket;
+	typedef BucketItem<K, V> BucketItem;
 
-	MultiHash(std::atomic<Bucket*>* pHash, Bucket* pStorage, const size_t max_elements)
+	MultiHash(std::atomic<BucketItem*>* pHash, BucketItem* pStorage, const size_t max_elements)
 		: m_hash(pHash)
 		, m_storage(pStorage)
 		, MAX_ELEMENTS(max_elements)
@@ -85,14 +85,14 @@ public:
 		const size_t h = hash(k, seed);
 		const size_t index = h % KEY_COUNT;
 
-		Bucket* pBucket = GetNextFreeBucket();
+		BucketItem* pBucket = GetNextFreeBucket();
 		pBucket->h = h;
 		pBucket->k = k;
 		pBucket->v = v;
 
 		for (size_t i = 0; i < KEY_COUNT; ++i)
 		{
-			Bucket* pNull = nullptr;
+			BucketItem* pNull = nullptr;
 			const size_t actualIdx = (index + i) % KEY_COUNT;
 			if (m_hash[actualIdx].compare_exchange_strong(pNull, pBucket))
 			{
@@ -110,7 +110,7 @@ public:
 		for (size_t i = 0; i < KEY_COUNT; ++i)
 		{
 			const size_t actualIdx = (index + i) % KEY_COUNT;
-			Bucket* pHash = m_hash[actualIdx];
+			BucketItem* pHash = m_hash[actualIdx];
 			if (pHash == nullptr)
 				break;
 
@@ -132,7 +132,7 @@ public:
 		for (size_t i = 0; i < KEY_COUNT; ++i)
 		{
 			const size_t actualIdx = (index + i) % KEY_COUNT;
-			Bucket* pHash = m_hash[actualIdx];
+			BucketItem* pHash = m_hash[actualIdx];
 			if (pHash == nullptr || ret >= max_values)
 				break;
 
@@ -155,7 +155,7 @@ public:
 		for (size_t i = 0; i < KEY_COUNT; ++i)
 		{
 			const size_t actualIdx = (index + i) % KEY_COUNT;
-			const Bucket* pHash = m_hash[actualIdx];
+			const BucketItem* pHash = m_hash[actualIdx];
 			if (pHash == nullptr)
 				break;
 
@@ -165,12 +165,12 @@ public:
 		return ret;
 	}
 private:
-	Bucket* GetNextFreeBucket()
+	BucketItem* GetNextFreeBucket()
 	{
-		Bucket* pRet = nullptr;
+		BucketItem* pRet = nullptr;
 		for (size_t i = 0; i < MAX_ELEMENTS; ++i)
 		{
-			Bucket* pTemp = &m_storage[i];
+			BucketItem* pTemp = &m_storage[i];
 			bool in_use = false;
 			if (pTemp->in_use.compare_exchange_strong(in_use, true))
 			{
@@ -184,8 +184,8 @@ private:
 	}
 
 private:
-	Bucket* m_storage;
-	std::atomic<Bucket*>* m_hash;
+	BucketItem* m_storage;
+	std::atomic<BucketItem*>* m_hash;
 	const size_t KEY_COUNT;
 	const size_t MAX_ELEMENTS;
 
@@ -199,7 +199,7 @@ template<typename K,
 {
 private:
 	typedef MultiHash<K, V> Base;
-	typedef BucketT<K, V> Bucket;
+	typedef BucketItem<K, V> BucketItem;
 	constexpr static const size_t KEY_COUNT = Base::ComputeHashKeyCount(MAX_ELEMENTS);
 
 public:
@@ -215,10 +215,10 @@ public:
 	}
 
 private:
-	constexpr static const auto _bucket = sizeof(Bucket);
-	Bucket m_storage[MAX_ELEMENTS];
+	constexpr static const auto _bucket = sizeof(BucketItem);
+	BucketItem m_storage[MAX_ELEMENTS];
 	constexpr static const auto _storage = sizeof(m_storage);
-	std::atomic<Bucket*> m_hash[KEY_COUNT];
+	std::atomic<BucketItem*> m_hash[KEY_COUNT];
 };
 
 template<typename K,
@@ -226,13 +226,13 @@ template<typename K,
 	class MultiHash_H : public MultiHash<K, V>
 {
 	typedef MultiHash<K, V> Base;
-	typedef BucketT<K, V> Bucket;
+	typedef BucketItem<K, V> BucketItem;
 
 public:
 	MultiHash_H(const size_t max_elements)
 		: Base(
-			m_hash = new std::atomic<Bucket*>[Base::ComputeHashKeyCount(max_elements)](),
-			m_storage = new Bucket[max_elements](),
+			m_hash = new std::atomic<BucketItem*>[Base::ComputeHashKeyCount(max_elements)](),
+			m_storage = new BucketItem[max_elements](),
 			max_elements)
 	{
 	}
@@ -244,6 +244,6 @@ public:
 	}
 
 private:
-	std::atomic<Bucket*>* m_hash;
-	Bucket* m_storage;
+	std::atomic<BucketItem*>* m_hash;
+	BucketItem* m_storage;
 };
