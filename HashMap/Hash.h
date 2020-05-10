@@ -25,7 +25,7 @@ typedef std::integral_constant<Allocator, Allocator::STATIC> ALLOC_STATIC;
 typedef std::integral_constant<Allocator, Allocator::EXTERNAL> ALLOC_EXTERNAL;
 
 template<typename T, Allocator ALLOC_TYPE, size_t ... Args>
-struct HashContainer :
+struct Container :
 	public std::conditional<ALLOC_TYPE == Allocator::STATIC, Array<T, Args ...>,
 	typename std::conditional<ALLOC_TYPE == Allocator::HEAP, PtrArray<T, true>, PtrArray<T, false>>::type>::type
 {
@@ -34,28 +34,36 @@ struct HashContainer :
 	typedef std::integral_constant<Allocator, ALLOC_TYPE> _THIS;
 
 	template<typename TT = _THIS, typename std::enable_if<std::is_same<TT, ALLOC_EXTERNAL>::value>::type* = nullptr>
-	HashContainer(const size_t size, T* ptr) 
+	Container(const size_t size, T* ptr)
 	{
 		Base::_array = ptr;
 		Base::SIZE = size;
 	}
 	template<typename TT = _THIS, typename std::enable_if<std::is_same<TT, ALLOC_EXTERNAL>::value>::type* = nullptr>
-	HashContainer() = delete;
+	Container() = delete;
 
 	template<typename TT = _THIS, typename std::enable_if<std::is_same<TT, ALLOC_HEAP>::value>::type* = nullptr>
-	HashContainer(const size_t size) {
-		Base::_array = new T[size]{ T() };
-		Base::SIZE = size;
+	Container(const size_t size) : Base(size) {
+		//Base::_array = new T[size]{ T() };
+		//Base::SIZE = size;
 	}
 
 	template<typename TT = _THIS, typename std::enable_if<std::is_same<TT, ALLOC_STATIC>::value>::type* = nullptr>
-	HashContainer() {
+	Container() {
 	}
 
-	HashContainer(HashContainer&&) = delete;
-	HashContainer(HashContainer&) = delete;
-	HashContainer& operator=(HashContainer&) = delete;
-	HashContainer& operator=(HashContainer&&) = delete;
+	Container(Container&&) = delete;
+	Container(Container&) = delete;
+	Container& operator=(Container&) = delete;
+	Container& operator=(Container&&) = delete;
+};
+
+template<typename T, Allocator ALLOC_TYPE, size_t ... Args>
+struct HashContainer : public Container<T, ALLOC_TYPE, Args ...>
+{
+	HashContainer() : m_hash{} {}
+
+	Container<T, ALLOC_TYPE, Args ...> m_hash;
 };
 
 template<size_t SIZE = 0>
@@ -77,48 +85,110 @@ struct Test :
 {
 };
 
+template <size_t COLLISION_SIZE_HINT>
+struct CollisionCalc
+{
+	constexpr static const size_t COLLISION_SIZE =
+		COLLISION_SIZE_HINT > MIN_COLLISION_SIZE
+		? COLLISION_SIZE_HINT
+		: MIN_COLLISION_SIZE;
+};
+
+template <size_t COLLISION_SIZE_HINT, size_t MAX_ELEMENTS = 0>
+struct StaticParams : public CollisionCalc<COLLISION_SIZE_HINT>
+{
+	static_assert(MAX_ELEMENTS > 0, "Element count cannot be zero");
+	constexpr static const size_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS);
+	constexpr size_t GetKeyCount() const { return KEY_COUNT; }
+	constexpr size_t GetMaxElements() const { return MAX_ELEMENTS; }
+};
+
+template <size_t COLLISION_SIZE_HINT>
+struct PtrParams : public CollisionCalc<COLLISION_SIZE_HINT>
+{
+	PtrParams(const size_t count)
+		: keyCount(ComputeHashKeyCount(count))
+		, maxElements(count) {}
+
+	size_t GetKeyCount() const { return keyCount; }
+	size_t GetMaxElements() const { return maxElements; }
+	const size_t keyCount;
+	const size_t maxElements;
+};
+
 template<typename K,
 	typename V,
-	size_t MAX_ELEMENTS,
+	Allocator ALLOC_TYPE = Allocator::HEAP,
 	size_t COLLISION_SIZE_HINT = MIN_COLLISION_SIZE,
-	Allocator ALLOC_TYPE = Allocator::HEAP>
-	class Hash
+	size_t ... Args>
+	class Hash : public std::conditional<ALLOC_TYPE == Allocator::STATIC,
+	StaticParams<COLLISION_SIZE_HINT, Args ...>, PtrParams<COLLISION_SIZE_HINT>>::type
 {
 	static_assert(std::is_trivially_copyable<K>::value, "Template type K must be trivially copyable.");
 	typedef KeyHashPairT<K> KeyHashPair;
 	typedef KeyValueT<K, V> KeyValue;
 
 private:
-	constexpr static const size_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS);
-	constexpr static const size_t COLLISION_SIZE = COLLISION_SIZE_HINT > MIN_COLLISION_SIZE ? COLLISION_SIZE_HINT : MIN_COLLISION_SIZE;
+	//constexpr static const size_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS);
+	//constexpr static const size_t COLLISION_SIZE = COLLISION_SIZE_HINT > MIN_COLLISION_SIZE ? COLLISION_SIZE_HINT : MIN_COLLISION_SIZE;
 	constexpr static const bool IS_LOCK_FREE = KeyHashPair::IsLockFree();
-	typedef BucketT<K, V, COLLISION_SIZE> Bucket;
 
 	constexpr static const bool _K = std::is_trivially_copyable<K>::value;
 	constexpr static const bool _V = std::is_trivially_copyable<V>::value;
 
+	typedef std::integral_constant<Allocator, ALLOC_TYPE> _THIS;
+
+	typedef typename std::conditional<ALLOC_TYPE == Allocator::STATIC,
+		StaticParams<COLLISION_SIZE_HINT, Args ...>, PtrParams<COLLISION_SIZE_HINT>>::type ParamsBase;
+
+	typedef BucketT<K, V, ParamsBase::COLLISION_SIZE> Bucket;
+
 public:
+	template<typename TT = _THIS, typename std::enable_if<std::is_same<TT, ALLOC_STATIC>::value>::type* = nullptr>
 	Hash()
 		: m_hash()
 		, m_recycle()
 		, m_usedNodes(0)
 		, seed(GenerateSeed())
 	{
-		for (size_t i = 0; i < MAX_ELEMENTS; ++i)
+		for (size_t i = 0; i < ParamsBase::GetMaxElements(); ++i)
 		{
 			m_recycle[i] = &m_keyStorage[i];
 		}
 	}
 
+	template<typename TT = _THIS, typename std::enable_if<std::is_same<TT, ALLOC_HEAP>::value>::type* = nullptr>
+	Hash(const size_t max_elements)
+		: ParamsBase(max_elements)
+		, m_hash(ComputeHashKeyCount(max_elements))
+		, m_keyStorage(max_elements)
+		, m_recycle(max_elements)
+		, m_usedNodes(0)
+		, seed(GenerateSeed())
+	{
+		for (size_t i = 0; i < ParamsBase::GetMaxElements(); ++i)
+		{
+			m_recycle[i] = &m_keyStorage[i];
+		}
+	}
+
+	template<typename TT = _THIS, typename std::enable_if<std::is_same<TT, ALLOC_EXTERNAL>::value>::type* = nullptr>
+	struct ExtParams
+	{
+		Bucket* hash;
+		KeyValue* keyStorage;
+		std::atomic<KeyValue*>* keyRecycle;
+	};
+
 	void Add(const K& k, const V& v)
 	{
 		const size_t h = hash(k, seed);
-		const size_t index = h % KEY_COUNT;
+		const size_t index = h % ParamsBase::GetKeyCount();
 
 		KeyValue* pKeyValue = GetNextFreeKeyValue();
 		pKeyValue->v = v;
 		pKeyValue->k = KeyHashPair{ h, k };
-
+		m_hash;
 		m_hash[index].Add(pKeyValue);
 	}
 
@@ -127,7 +197,7 @@ public:
 		V ret = V();
 
 		const size_t h = hash(k, seed);
-		const size_t index = h % KEY_COUNT;
+		const size_t index = h % ParamsBase::GetKeyCount();
 		KeyValue* pKeyValue = nullptr;
 		if (m_hash[index].TakeValue(k, h, &pKeyValue))
 		{
@@ -142,7 +212,7 @@ public:
 	void Take(const K& k, const std::function<bool(const V&)>& receiver)
 	{
 		const size_t h = hash(k, seed);
-		const size_t index = h % KEY_COUNT;
+		const size_t index = h % ParamsBase::GetKeyCount();
 		std::function<void(KeyValue*)> release = std::bind(&Hash::ReleaseNode, this, std::placeholders::_1);
 		m_hash[index].TakeValue(k, h, receiver, release);
 	}
@@ -151,7 +221,7 @@ private:
 	KeyValue* GetNextFreeKeyValue()
 	{
 		KeyValue* pRet = nullptr;
-		for (size_t i = m_usedNodes; i < KEY_COUNT; ++i)
+		for (size_t i = m_usedNodes; i < ParamsBase::GetKeyCount(); ++i)
 		{
 			KeyValue* pExpected = m_recycle[i];
 			if (pExpected == nullptr)
@@ -183,12 +253,14 @@ private:
 	}
 
 private:
-	Array<Bucket, KEY_COUNT> m_hash;
-	Array<KeyValue, MAX_ELEMENTS> m_keyStorage;
-
-	//HashContainer<Bucket, ALLOC_TYPE, KEY_COUNT> m_test;
-
-	Array<std::atomic<KeyValue*>, MAX_ELEMENTS> m_recycle;
+	//Array<Bucket, KEY_COUNT> m_hash;
+	//Array<KeyValue, MAX_ELEMENTS> m_keyStorage;
+	//Array<std::atomic<KeyValue*>, MAX_ELEMENTS> m_recycle;
+	Container<Bucket, ALLOC_TYPE, Args ...> m_hash;
+	Container<KeyValue, ALLOC_TYPE, Args ...> m_keyStorage;
+	Container<std::atomic<KeyValue*>, ALLOC_TYPE, Args ...> m_recycle;
+	std::size_t m_keyCount;
+	std::size_t m_maxElements;
 	std::atomic<size_t> m_usedNodes;
 
 	const size_t seed;

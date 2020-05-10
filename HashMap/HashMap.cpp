@@ -56,14 +56,14 @@ struct T {
 
 int main()
 {
-	{
-		HashContainer<int, Allocator::HEAP> heap(1001);
-		HashContainer<bool, Allocator::STATIC, 10> _static;
+	/*{
+		Container<int, Allocator::HEAP> heap(1001);
+		Container<bool, Allocator::STATIC, 10> _static;
 		std::cout << heap[9] << std::endl;
 		std::cout << _static[9] << std::endl;
 
 		unsigned test[1001]{ 1111 };
-		HashContainer<unsigned, Allocator::EXTERNAL> _ext(1001, &test[0]);
+		Container<unsigned, Allocator::EXTERNAL> _ext(1001, &test[0]);
 		std::cout << _ext[9] << std::endl;
 	}
 	constexpr size_t t = 1;
@@ -88,14 +88,14 @@ int main()
 		std::integral_constant<Allocator, Allocator::HEAP>>::value;
 	{
 		const size_t s(1001);
-		HashContainer<int, Allocator::HEAP, 100> test(1001);
+		Container<int, Allocator::HEAP, 100> test(1001);
 		//test.mySineDoubleOnly();
 		//test.SIZE = 3;
 		//int _a = test[1];
-		HashContainer<int, Allocator::STATIC, 100> test2;
+		Container<int, Allocator::STATIC, 100> test2;
 		//test2.mySineDoubleOnly();
 		//int _b = test[2];
-		HashContainer<int, Allocator::EXTERNAL, 100> test3(1, nullptr);
+		Container<int, Allocator::EXTERNAL, 100> test3(1, nullptr);
 		//test3.mySineDoubleOnly();
 //		test3.SIZE = 3;
 		//int _c = test[2];
@@ -188,10 +188,12 @@ int main()
 		v.Add(29382, s);
 		v.Add(93932, "Test 2");
 		std::string test = v.Take(29382);
-	}
+	}*/
 	{
 		constexpr const auto tt = sizeof(TT);
-		Hash<TT, int, 100> a;
+		Hash<TT, int> a(100);
+		Hash<TT, int, Allocator::STATIC, 8, 100> _a;
+		Hash<TT, int, Allocator::EXTERNAL>::ExtParams bb;
 		TT t1{ 1,2,3 };
 		TT t2{ 3,1,2 };
 		TT t3{ 1,3,2 };

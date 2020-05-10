@@ -65,9 +65,9 @@ struct Array
 template<typename T, bool DELETE >
 struct PtrArray
 {
-	PtrArray() 
-		: _array{ nullptr }
-		, SIZE(0)
+	PtrArray(const size_t size) 
+		: _array(new T[size])
+		, SIZE(size)
 	{
 	}
 
