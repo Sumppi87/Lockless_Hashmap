@@ -49,8 +49,59 @@ size_t hash(const std::string& s, const size_t seed)
 
 static MultiHash_S<TT, std::string, 1000> V;
 
+template<size_t SIZE>
+struct T {
+	constexpr static const size_t _SIZE = SIZE;
+};
+
 int main()
 {
+	{
+		HashContainer<int, Allocator::HEAP> heap(1001);
+		HashContainer<bool, Allocator::STATIC, 10> _static;
+		std::cout << heap[9] << std::endl;
+		std::cout << _static[9] << std::endl;
+
+		unsigned test[1001]{ 1111 };
+		HashContainer<unsigned, Allocator::EXTERNAL> _ext(1001, &test[0]);
+		std::cout << _ext[9] << std::endl;
+	}
+	constexpr size_t t = 1;
+	T<100>::_SIZE;
+	Test<Allocator::STATIC> a;
+	a.base2;
+	Test<Allocator::HEAP, 1> bb;
+	bb.base;
+	bb.base1;
+	bb._T;
+	typedef std::integral_constant<Allocator, Allocator::HEAP>::type A;
+	typedef std::integral_constant<Allocator, Allocator::STATIC>::type B;
+
+
+	typedef std::integral_constant<Allocator, Allocator::HEAP>::type AA;
+	typedef std::integral_constant<Allocator, Allocator::HEAP>::type BB;
+	std::is_same<A, B>::type;
+	std::is_same<AA, BB>::type;
+
+	typedef std::integral_constant<Allocator, Allocator::STATIC> B;
+	std::is_same<std::integral_constant<Allocator, Allocator::HEAP>,
+		std::integral_constant<Allocator, Allocator::HEAP>>::value;
+	{
+		const size_t s(1001);
+		HashContainer<int, Allocator::HEAP, 100> test(1001);
+		//test.mySineDoubleOnly();
+		//test.SIZE = 3;
+		//int _a = test[1];
+		HashContainer<int, Allocator::STATIC, 100> test2;
+		//test2.mySineDoubleOnly();
+		//int _b = test[2];
+		HashContainer<int, Allocator::EXTERNAL, 100> test3(1, nullptr);
+		//test3.mySineDoubleOnly();
+//		test3.SIZE = 3;
+		//int _c = test[2];
+		int b = 1;
+		b = 2;
+	}
 	{
 		MultiHash_S<int, int, 912> test;
 		auto start = std::chrono::steady_clock::now();

@@ -39,9 +39,11 @@ constexpr static size_t ComputeHashKeyCount(const size_t count)
 	return GetNextPowerOfTwo(count * 2);
 }
 
-template<typename T, size_t SIZE>
+template<typename T, size_t SIZE = 0>
 struct Array
 {
+	Array() : _array{} {}
+	static_assert(SIZE > 0, "Size cannot be zero");
 	inline T& operator[](const size_t idx) noexcept
 	{
 #ifdef _DEBUG
@@ -58,6 +60,43 @@ struct Array
 	}
 
 	T _array[SIZE];
+};
+
+template<typename T, bool DELETE >
+struct PtrArray
+{
+	PtrArray() 
+		: _array{ nullptr }
+		, SIZE(0)
+	{
+	}
+
+	inline T& operator[](const size_t idx) noexcept
+	{
+#ifdef _DEBUG
+		assert(idx < SIZE);
+#endif // DEBUG
+		return _array[idx];
+	}
+	inline const T& operator[](const size_t idx) const noexcept
+	{
+#ifdef _DEBUG
+		assert(idx < SIZE);
+#endif // DEBUG
+		return _array[idx];
+	}
+
+	T* _array;
+	size_t SIZE;
+
+	~PtrArray()
+	{
+		if constexpr (DELETE)
+		{
+			delete[] _array;
+			_array = nullptr;
+		}
+	}
 };
 
 template<typename K>
@@ -106,7 +145,7 @@ class BucketT
 {
 public:
 	BucketT() :
-		m_bucket{ nullptr },
+		m_bucket{ },
 		m_usageCounter(0)
 	{
 	}
