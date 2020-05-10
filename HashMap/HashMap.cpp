@@ -172,9 +172,16 @@ int main()
 		a.Add(t1, 1);
 		a.Add(t2, 2);
 		a.Add(t3, 3);
+		a.Add(t3, 777);
 		a.Add(t3, 4);
 		a.Add(t4, 5);
 		int t3_ = a.Take(t3);
+		auto f = [](const int& obj)
+		{
+			std::cout << "Hello, " << obj << std::endl;
+			return true;
+		};
+		a.Take(t3, f);
 		t3_ = t3_;
 	}
 	std::cout << "Hello World!\n";

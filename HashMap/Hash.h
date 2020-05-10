@@ -4,6 +4,7 @@
 #include <random> 
 #include "HashFunctions.h"
 #include <assert.h>
+#include <functional>
 
 static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 
@@ -13,7 +14,7 @@ static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 const size_t MIN_COLLISION_SIZE = 8;
 
 template<typename T, size_t SIZE>
-struct Table
+struct Array
 {
 	inline T& operator[](const size_t idx) noexcept
 	{
@@ -73,7 +74,6 @@ private:
 	}
 
 	constexpr static const size_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS);
-	constexpr static const size_t MASK = KEY_COUNT - 1;
 	constexpr static const size_t COLLISION_SIZE = COLLISION_SIZE_HINT > MIN_COLLISION_SIZE ? COLLISION_SIZE_HINT : MIN_COLLISION_SIZE;
 
 	struct KeyHashPair
@@ -81,16 +81,11 @@ private:
 		size_t hash;
 		K key;
 
-		__declspec(deprecated("** sizeof(K) is too large for lockless access"
-			", suppress this warning to continue **"))
-			static constexpr void NotLockFree() {}
+		__declspec(deprecated("** sizeof(K) is too large for lockless access, suppress this warning to continue **"))
+			static constexpr bool NotLockFree() { return false; }
 		static constexpr bool IsLockFree()
 		{
-			if constexpr (sizeof(KeyHashPair) > 8)
-			{
-				NotLockFree();
-				return false;
-			}
+			if constexpr (sizeof(KeyHashPair) > 8) { return NotLockFree(); }
 			return true;
 		}
 	};
@@ -189,8 +184,43 @@ private:
 			return true;
 		}
 
+		void TakeValue(const K& k, const size_t hash, const std::function<bool(const V&)>& f, Hash* pHash)
+		{
+			if (m_usageCounter == 0)
+				return;
+
+			for (size_t i = 0; i < COLLISION_SIZE; ++i)
+			{
+				// Check if Bucket was emptied while accessing
+				if (m_usageCounter == 0)
+				{
+					break;
+				}
+
+				KeyValue* pCandidate = m_bucket[i];
+				if (pCandidate == nullptr)
+				{
+					continue;
+				}
+				else if (KeyHashPair kp{ hash, k }; pCandidate->k.compare_exchange_strong(kp, KeyHashPair()))
+				{
+					if (!m_bucket[i].compare_exchange_strong(pCandidate, nullptr))
+					{
+						// This shouldn't be possible
+						throw std::logic_error("HashMap went booboo");
+					}
+					--m_usageCounter;
+
+					if (!f(pCandidate->v))
+						break;
+
+					pHash->ReleaseNode(pCandidate);
+				}
+			}
+		}
+
 	private:
-		Table<std::atomic<KeyValue*>, COLLISION_SIZE> m_bucket;
+		Array<std::atomic<KeyValue*>, COLLISION_SIZE> m_bucket;
 		std::atomic<size_t> m_usageCounter; // Keys in bucket
 	};
 	typedef BucketT<K, V> Bucket;
@@ -240,6 +270,13 @@ public:
 		return ret;
 	}
 
+	void Take(const K& k, const std::function<bool(const V&)>& f)
+	{
+		const size_t h = hash(k, seed);
+		const size_t index = h % KEY_COUNT;
+		m_hash[index].TakeValue(k, h, f, this);
+	}
+
 private:
 	KeyValue* GetNextFreeKeyValue()
 	{
@@ -276,15 +313,16 @@ private:
 	}
 
 private:
-	Table<Bucket, KEY_COUNT> m_hash;
-	Table<KeyValue, MAX_ELEMENTS> m_keyStorage;
+	Array<Bucket, KEY_COUNT> m_hash;
+	Array<KeyValue, MAX_ELEMENTS> m_keyStorage;
 
-	Table<std::atomic<KeyValue*>, MAX_ELEMENTS> m_recycle;
+	Array<std::atomic<KeyValue*>, MAX_ELEMENTS> m_recycle;
 	std::atomic<size_t> m_usedNodes;
 
 	const size_t seed;
 
 	constexpr static const size_t _hash = sizeof(m_hash);
+	constexpr static const size_t _keys = sizeof(m_keyStorage);
 	constexpr static const size_t _recycle = sizeof(m_recycle);
 	constexpr static const size_t _key = sizeof(KeyValue);
 	constexpr static const size_t _bucket = sizeof(Bucket);
