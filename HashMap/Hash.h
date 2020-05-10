@@ -40,6 +40,8 @@ template<typename K,
 	size_t COLLISION_SIZE_HINT = MIN_COLLISION_SIZE>
 	class Hash
 {
+	static_assert(std::is_trivially_copyable<K>::value, "Template type K must be trivially copyable.");
+
 private:
 	static size_t GenerateSeed()
 	{
