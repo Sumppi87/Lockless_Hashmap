@@ -54,53 +54,60 @@ struct T {
 	constexpr static const size_t _SIZE = SIZE;
 };
 
+template<typename Hash>
+void TestHash(Hash& a)
+{
+	TT t1{ 1,2,3 };
+	TT t2{ 3,1,2 };
+	TT t3{ 1,3,2 };
+	TT t4{ 2,1,3 };
+	a.Add(t1, 1);
+	a.Add(t2, 2);
+	a.Add(t3, 3);
+	a.Add(t3, 777);
+	a.Add(t3, 4);
+	a.Add(t4, 5);
+	int t3_ = a.Take(t3);
+	auto f = [](const int& obj)
+	{
+		std::cout << "Hello, " << obj << std::endl;
+		return true;
+	};
+	a.Take(t3, f);
+	t3_ = t3_;
+}
+
+template<typename Hash>
+int Chrono(Hash& test)
+{
+	{
+		auto start = std::chrono::steady_clock::now();
+		test.Add(181, 1);
+		test.Add(191, 1);
+		test.Add(201, 1);
+		test.Add(211, 1);
+		test.Add(221, 1);
+		auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start);
+		std::cout << duration.count() << std::endl;
+		return test.Take(181) + test.Take(191) + test.Take(201) + test.Take(211) + test.Take(221);
+	}
+}
+
 int main()
 {
-	/*{
-		Container<int, Allocator::HEAP> heap(1001);
-		Container<bool, Allocator::STATIC, 10> _static;
+	{
+		Hash<int, int> test(912);
+		Chrono(test);
+	}
+	{
+		Hash<int, int, 8, 912> test;
+		Chrono(test);
+	}
+	{
+		Container<int> heap(1001);
+		Container<bool, 10> _static;
 		std::cout << heap[9] << std::endl;
 		std::cout << _static[9] << std::endl;
-
-		unsigned test[1001]{ 1111 };
-		Container<unsigned, Allocator::EXTERNAL> _ext(1001, &test[0]);
-		std::cout << _ext[9] << std::endl;
-	}
-	constexpr size_t t = 1;
-	T<100>::_SIZE;
-	Test<Allocator::STATIC> a;
-	a.base2;
-	Test<Allocator::HEAP, 1> bb;
-	bb.base;
-	bb.base1;
-	bb._T;
-	typedef std::integral_constant<Allocator, Allocator::HEAP>::type A;
-	typedef std::integral_constant<Allocator, Allocator::STATIC>::type B;
-
-
-	typedef std::integral_constant<Allocator, Allocator::HEAP>::type AA;
-	typedef std::integral_constant<Allocator, Allocator::HEAP>::type BB;
-	std::is_same<A, B>::type;
-	std::is_same<AA, BB>::type;
-
-	typedef std::integral_constant<Allocator, Allocator::STATIC> B;
-	std::is_same<std::integral_constant<Allocator, Allocator::HEAP>,
-		std::integral_constant<Allocator, Allocator::HEAP>>::value;
-	{
-		const size_t s(1001);
-		Container<int, Allocator::HEAP, 100> test(1001);
-		//test.mySineDoubleOnly();
-		//test.SIZE = 3;
-		//int _a = test[1];
-		Container<int, Allocator::STATIC, 100> test2;
-		//test2.mySineDoubleOnly();
-		//int _b = test[2];
-		Container<int, Allocator::EXTERNAL, 100> test3(1, nullptr);
-		//test3.mySineDoubleOnly();
-//		test3.SIZE = 3;
-		//int _c = test[2];
-		int b = 1;
-		b = 2;
 	}
 	{
 		MultiHash_S<int, int, 912> test;
@@ -111,8 +118,9 @@ int main()
 		test.Add(211, 1);
 		test.Add(221, 1);
 		auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start);
-		std::cout << duration.count();
+		std::cout << duration.count() << std::endl;
 		//return test.Count(181) + test.Count(191) + test.Count(201) + test.Count(211) + test.Count(221);
+		//return 0;
 	}
 	{
 		MultiHash_S<const char*, int, 912> i;
@@ -142,7 +150,7 @@ int main()
 		auto t = test.size();
 	}
 	{
-		MultiHash_S<int, int, 9172> i;
+		MultiHash_S<int, int, 912> i;
 		constexpr auto size = sizeof(i) / 1024;
 		i.Add(100, 12);
 		i.Add(100, 13);
@@ -159,7 +167,7 @@ int main()
 		c = c;
 	}
 	{
-		MultiHash_H<int, int> i(9172);
+		MultiHash_H<int, int> i(917);
 		constexpr auto size = sizeof(i);
 		i.Add(100, 12);
 		i.Add(100, 13);
@@ -176,9 +184,9 @@ int main()
 		c = c;
 	}
 	{
-		Hash<int, int, 100> t;
+		Hash<int, int, 8, 100> t;
 		constexpr auto t_ = sizeof(t);
-		Hash<int, std::string, 1000> v;
+		Hash<int, std::string, 8, 1000> v;
 		constexpr auto v_ = sizeof(v);
 		t.Add(rand(), 2);
 		int b = 3;
@@ -188,30 +196,22 @@ int main()
 		v.Add(29382, s);
 		v.Add(93932, "Test 2");
 		std::string test = v.Take(29382);
-	}*/
+	}
 	{
-		constexpr const auto tt = sizeof(TT);
+		Hash<TT, int>::Bucket bucket[ComputeHashKeyCount(100)]{};
+		Hash<TT, int>::KeyValue keys[100]{};
+		std::atomic<Hash<TT, int>::KeyValue*> keyRecycle[100];
+		Hash<TT, int> a(size_t(100), &bucket[0], &keys[0], &keyRecycle[0]);
+		TestHash(a);
+	}
+	{
 		Hash<TT, int> a(100);
-		Hash<TT, int, Allocator::STATIC, 8, 100> _a;
-		Hash<TT, int, Allocator::EXTERNAL>::ExtParams bb;
-		TT t1{ 1,2,3 };
-		TT t2{ 3,1,2 };
-		TT t3{ 1,3,2 };
-		TT t4{ 2,1,3 };
-		a.Add(t1, 1);
-		a.Add(t2, 2);
-		a.Add(t3, 3);
-		a.Add(t3, 777);
-		a.Add(t3, 4);
-		a.Add(t4, 5);
-		int t3_ = a.Take(t3);
-		auto f = [](const int& obj)
-		{
-			std::cout << "Hello, " << obj << std::endl;
-			return true;
-		};
-		a.Take(t3, f);
-		t3_ = t3_;
+		TestHash(a);
+	}
+
+	{
+		Hash<TT, int, 8, 100> a;
+		TestHash(a);
 	}
 	std::cout << "Hello World!\n";
 }

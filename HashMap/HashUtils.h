@@ -39,7 +39,7 @@ constexpr static size_t ComputeHashKeyCount(const size_t count)
 	return GetNextPowerOfTwo(count * 2);
 }
 
-template<typename T, size_t SIZE = 0>
+template<typename T, size_t SIZE>
 struct Array
 {
 	Array() : _array{} {}
@@ -62,14 +62,23 @@ struct Array
 	T _array[SIZE];
 };
 
-template<typename T, bool DELETE >
+template<typename T>
 struct PtrArray
 {
 	PtrArray(const size_t size) 
 		: _array(new T[size])
 		, SIZE(size)
+		, _deleteArray(true)
 	{
 	}
+
+	PtrArray(const size_t size, T* ptr)
+		: _array(ptr)
+		, SIZE(size)
+		, _deleteArray(false)
+	{
+	}
+
 
 	inline T& operator[](const size_t idx) noexcept
 	{
@@ -88,10 +97,11 @@ struct PtrArray
 
 	T* _array;
 	size_t SIZE;
+	const bool _deleteArray;
 
 	~PtrArray()
 	{
-		if constexpr (DELETE)
+		if (_deleteArray)
 		{
 			delete[] _array;
 			_array = nullptr;

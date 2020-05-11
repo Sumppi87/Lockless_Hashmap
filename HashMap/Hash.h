@@ -12,77 +12,34 @@ static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 #define C14 __cplusplus >= 201402L
 
 const size_t MIN_COLLISION_SIZE = 8;
+typedef std::bool_constant<true> ALLOC_HEAP;
+typedef std::bool_constant<false> ALLOC_STATIC;
 
-enum class Allocator
-{
-	STATIC,
-	HEAP,
-	EXTERNAL
-};
-
-typedef std::integral_constant<Allocator, Allocator::HEAP> ALLOC_HEAP;
-typedef std::integral_constant<Allocator, Allocator::STATIC> ALLOC_STATIC;
-typedef std::integral_constant<Allocator, Allocator::EXTERNAL> ALLOC_EXTERNAL;
-
-template<typename T, Allocator ALLOC_TYPE, size_t ... Args>
+template<typename T, size_t SIZE = 0>
 struct Container :
-	public std::conditional<ALLOC_TYPE == Allocator::STATIC, Array<T, Args ...>,
-	typename std::conditional<ALLOC_TYPE == Allocator::HEAP, PtrArray<T, true>, PtrArray<T, false>>::type>::type
+	public std::conditional<SIZE == 0, PtrArray<T>, Array<T, SIZE>>::type
 {
-	typedef typename std::conditional<ALLOC_TYPE == Allocator::STATIC, Array<T, Args ...>,
-		typename std::conditional<ALLOC_TYPE == Allocator::HEAP, PtrArray<T, true>, PtrArray<T, false>>::type>::type Base;
-	typedef std::integral_constant<Allocator, ALLOC_TYPE> _THIS;
+	typedef typename std::conditional<SIZE == 0, PtrArray<T>, Array<T, SIZE>>::type Base;
+	typedef std::bool_constant<SIZE == 0> ALLOCATION_TYPE;
 
-	template<typename TT = _THIS, typename std::enable_if<std::is_same<TT, ALLOC_EXTERNAL>::value>::type* = nullptr>
+	template<typename TT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<TT, ALLOC_HEAP>::value>::type* = nullptr>
 	Container(const size_t size, T* ptr)
-	{
-		Base::_array = ptr;
-		Base::SIZE = size;
-	}
-	template<typename TT = _THIS, typename std::enable_if<std::is_same<TT, ALLOC_EXTERNAL>::value>::type* = nullptr>
-	Container() = delete;
+		: Base(size, ptr) {}
 
-	template<typename TT = _THIS, typename std::enable_if<std::is_same<TT, ALLOC_HEAP>::value>::type* = nullptr>
-	Container(const size_t size) : Base(size) {
-		//Base::_array = new T[size]{ T() };
-		//Base::SIZE = size;
-	}
+	template<typename TT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<TT, ALLOC_HEAP>::value>::type* = nullptr>
+	Container(void) = delete;
 
-	template<typename TT = _THIS, typename std::enable_if<std::is_same<TT, ALLOC_STATIC>::value>::type* = nullptr>
-	Container() {
-	}
+	template<typename TT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<TT, ALLOC_HEAP>::value>::type* = nullptr>
+	Container(const size_t size)
+		: Base(size) {}
+
+	template<typename TT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<TT, ALLOC_STATIC>::value>::type* = nullptr>
+	Container(void) {}
 
 	Container(Container&&) = delete;
 	Container(Container&) = delete;
 	Container& operator=(Container&) = delete;
 	Container& operator=(Container&&) = delete;
-};
-
-template<typename T, Allocator ALLOC_TYPE, size_t ... Args>
-struct HashContainer : public Container<T, ALLOC_TYPE, Args ...>
-{
-	HashContainer() : m_hash{} {}
-
-	Container<T, ALLOC_TYPE, Args ...> m_hash;
-};
-
-template<size_t SIZE = 0>
-struct Base1 {
-	//constexpr static const size_t _T = T::_SIZE;
-	constexpr static const size_t _T = SIZE;
-	constexpr const static bool base1 = false;
-	inline static const char* base = "Base1";
-	static_assert(SIZE > 0, "Size must be greater than zero");
-};
-
-struct Base2 {
-	constexpr const static bool base2 = false;
-};
-
-template<Allocator ALLOC_TYPE, size_t ... Args>
-struct Test :
-	public std::conditional<ALLOC_TYPE == Allocator::HEAP, Base1<Args ...>, Base2>::type
-{
 };
 
 template <size_t COLLISION_SIZE_HINT>
@@ -94,7 +51,7 @@ struct CollisionCalc
 		: MIN_COLLISION_SIZE;
 };
 
-template <size_t COLLISION_SIZE_HINT, size_t MAX_ELEMENTS = 0>
+template <size_t COLLISION_SIZE_HINT = 0, size_t MAX_ELEMENTS = 0>
 struct StaticParams : public CollisionCalc<COLLISION_SIZE_HINT>
 {
 	static_assert(MAX_ELEMENTS > 0, "Element count cannot be zero");
@@ -103,7 +60,7 @@ struct StaticParams : public CollisionCalc<COLLISION_SIZE_HINT>
 	constexpr size_t GetMaxElements() const { return MAX_ELEMENTS; }
 };
 
-template <size_t COLLISION_SIZE_HINT>
+template <size_t COLLISION_SIZE_HINT = 0, size_t ... Args>
 struct PtrParams : public CollisionCalc<COLLISION_SIZE_HINT>
 {
 	PtrParams(const size_t count)
@@ -116,35 +73,27 @@ struct PtrParams : public CollisionCalc<COLLISION_SIZE_HINT>
 	const size_t maxElements;
 };
 
+
 template<typename K,
 	typename V,
-	Allocator ALLOC_TYPE = Allocator::HEAP,
-	size_t COLLISION_SIZE_HINT = MIN_COLLISION_SIZE,
 	size_t ... Args>
-	class Hash : public std::conditional<ALLOC_TYPE == Allocator::STATIC,
-	StaticParams<COLLISION_SIZE_HINT, Args ...>, PtrParams<COLLISION_SIZE_HINT>>::type
+	class Hash : public std::conditional<(sizeof...(Args) > 0),
+	StaticParams<Args ...>, PtrParams<Args ...>>::type
 {
 	static_assert(std::is_trivially_copyable<K>::value, "Template type K must be trivially copyable.");
-	typedef KeyHashPairT<K> KeyHashPair;
-	typedef KeyValueT<K, V> KeyValue;
-
 private:
-	//constexpr static const size_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS);
-	//constexpr static const size_t COLLISION_SIZE = COLLISION_SIZE_HINT > MIN_COLLISION_SIZE ? COLLISION_SIZE_HINT : MIN_COLLISION_SIZE;
+	typedef KeyHashPairT<K> KeyHashPair;
 	constexpr static const bool IS_LOCK_FREE = KeyHashPair::IsLockFree();
+	typedef std::bool_constant<sizeof...(Args) == 0> HEAP_ALLOC;
 
-	constexpr static const bool _K = std::is_trivially_copyable<K>::value;
-	constexpr static const bool _V = std::is_trivially_copyable<V>::value;
-
-	typedef std::integral_constant<Allocator, ALLOC_TYPE> _THIS;
-
-	typedef typename std::conditional<ALLOC_TYPE == Allocator::STATIC,
-		StaticParams<COLLISION_SIZE_HINT, Args ...>, PtrParams<COLLISION_SIZE_HINT>>::type ParamsBase;
-
-	typedef BucketT<K, V, ParamsBase::COLLISION_SIZE> Bucket;
+	typedef typename std::conditional<(sizeof...(Args) > 0),
+		StaticParams<Args ...>, PtrParams<Args ...>>::type ParamsBase;
 
 public:
-	template<typename TT = _THIS, typename std::enable_if<std::is_same<TT, ALLOC_STATIC>::value>::type* = nullptr>
+	typedef KeyValueT<K, V> KeyValue;
+	typedef BucketT<K, V, ParamsBase::COLLISION_SIZE> Bucket;
+
+	template<typename TT = HEAP_ALLOC, typename std::enable_if<std::is_same<TT, ALLOC_STATIC>::value>::type* = nullptr>
 	Hash()
 		: m_hash()
 		, m_recycle()
@@ -157,7 +106,7 @@ public:
 		}
 	}
 
-	template<typename TT = _THIS, typename std::enable_if<std::is_same<TT, ALLOC_HEAP>::value>::type* = nullptr>
+	template<typename TT = HEAP_ALLOC, typename std::enable_if<std::is_same<TT, ALLOC_HEAP>::value>::type* = nullptr>
 	Hash(const size_t max_elements)
 		: ParamsBase(max_elements)
 		, m_hash(ComputeHashKeyCount(max_elements))
@@ -172,13 +121,20 @@ public:
 		}
 	}
 
-	template<typename TT = _THIS, typename std::enable_if<std::is_same<TT, ALLOC_EXTERNAL>::value>::type* = nullptr>
-	struct ExtParams
+	template<typename TT = HEAP_ALLOC, typename std::enable_if<std::is_same<TT, ALLOC_HEAP>::value>::type* = nullptr>
+	Hash(size_t max_elements, Bucket* hash, KeyValue* keyStorage, std::atomic<KeyValue*>* keyRecycle)
+		: ParamsBase(max_elements)
+		, m_hash(ComputeHashKeyCount(max_elements), hash)
+		, m_keyStorage(max_elements, keyStorage)
+		, m_recycle(max_elements, keyRecycle)
+		, m_usedNodes(0)
+		, seed(GenerateSeed())
 	{
-		Bucket* hash;
-		KeyValue* keyStorage;
-		std::atomic<KeyValue*>* keyRecycle;
-	};
+		for (size_t i = 0; i < ParamsBase::GetMaxElements(); ++i)
+		{
+			m_recycle[i] = &m_keyStorage[i];
+		}
+	}
 
 	void Add(const K& k, const V& v)
 	{
@@ -253,17 +209,24 @@ private:
 	}
 
 private:
-	//Array<Bucket, KEY_COUNT> m_hash;
-	//Array<KeyValue, MAX_ELEMENTS> m_keyStorage;
-	//Array<std::atomic<KeyValue*>, MAX_ELEMENTS> m_recycle;
-	Container<Bucket, ALLOC_TYPE, Args ...> m_hash;
-	Container<KeyValue, ALLOC_TYPE, Args ...> m_keyStorage;
-	Container<std::atomic<KeyValue*>, ALLOC_TYPE, Args ...> m_recycle;
+
+	template <size_t COLLISION_SIZE_HINT = 0, size_t MAX_ELEMENTS = 0>
+	struct ContainerParamExtractor
+	{
+		constexpr static const size_t MAX_ELEMENTS = MAX_ELEMENTS;
+		constexpr static const size_t KEY_COUNT = MAX_ELEMENTS > 0 ? ComputeHashKeyCount(MAX_ELEMENTS) : 0;
+	};
+	Container<Bucket, ContainerParamExtractor<Args ...>::KEY_COUNT> m_hash;
+	Container<KeyValue, ContainerParamExtractor<Args ...>::MAX_ELEMENTS> m_keyStorage;
+	Container<std::atomic<KeyValue*>, ContainerParamExtractor<Args ...>::MAX_ELEMENTS> m_recycle;
 	std::size_t m_keyCount;
 	std::size_t m_maxElements;
 	std::atomic<size_t> m_usedNodes;
 
 	const size_t seed;
+
+	constexpr static const bool _K = std::is_trivially_copyable<K>::value;
+	constexpr static const bool _V = std::is_trivially_copyable<V>::value;
 
 	constexpr static const size_t _hash = sizeof(m_hash);
 	constexpr static const size_t _keys = sizeof(m_keyStorage);
