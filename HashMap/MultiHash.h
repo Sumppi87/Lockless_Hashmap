@@ -1,7 +1,7 @@
 #pragma once
 #include <atomic>
 #include <type_traits>
-#include <random> 
+#include <random>
 #include "Hashfunctions.h"
 
 static_assert(__cplusplus >= 201103L, "C++11 or later required!");
@@ -51,20 +51,6 @@ template<typename K,
 		else { static_assert(false, "Unsupported platform"); }
 	}
 public:
-	constexpr static size_t ComputeHashKeyCount(const size_t count)
-	{
-		size_t v = count * 2;
-
-		v--;
-		v |= v >> 1;
-		v |= v >> 2;
-		v |= v >> 4;
-		v |= v >> 8;
-		v |= v >> 16;
-		v++;
-		return v;
-	}
-
 	typedef BucketItem<K, V> BucketItem;
 
 	MultiHash(std::atomic<BucketItem*>* pHash, BucketItem* pStorage, const size_t max_elements)
@@ -200,7 +186,7 @@ template<typename K,
 private:
 	typedef MultiHash<K, V> Base;
 	typedef BucketItem<K, V> BucketItem;
-	constexpr static const size_t KEY_COUNT = Base::ComputeHashKeyCount(MAX_ELEMENTS);
+	constexpr static const size_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS);
 
 public:
 	MultiHash_S()
@@ -231,7 +217,7 @@ template<typename K,
 public:
 	MultiHash_H(const size_t max_elements)
 		: Base(
-			m_hash = new std::atomic<BucketItem*>[Base::ComputeHashKeyCount(max_elements)](),
+			m_hash = new std::atomic<BucketItem*>[ComputeHashKeyCount(max_elements)](),
 			m_storage = new BucketItem[max_elements](),
 			max_elements)
 	{

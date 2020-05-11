@@ -7,13 +7,6 @@
 #include "MultiHash.h"
 #include <chrono>
 
-
-template <>
-size_t hash(const int& k, const size_t seed)
-{
-	return size_t(k) ^ seed;
-}
-
 struct TT
 {
 	uint16_t a;
@@ -29,7 +22,7 @@ bool operator==(const TT& o, const TT& t)
 template <>
 size_t hash(const TT& k, const size_t seed)
 {
-	return size_t((k.b << (k.c^k.b)) ^ k.a) ^ seed;
+	return hash(size_t((k.b << (k.c^k.b)) ^ k.a), seed);
 }
 
 template <>
@@ -97,10 +90,13 @@ int main()
 {
 	{
 		Hash<int, int> test(912);
+		constexpr auto size = sizeof(test);
+		constexpr auto heap = Hash<int, int>::NeededHeap(912) / 1024.0;
 		Chrono(test);
 	}
 	{
 		Hash<int, int, 8, 912> test;
+		constexpr auto size = sizeof(test) / 1024.0;
 		Chrono(test);
 	}
 	{
@@ -219,7 +215,7 @@ int main()
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
 // Debug program: F5 or Debug > Start Debugging menu
 
-// Tips for Getting Started: 
+// Tips for Getting Started:
 //   1. Use the Solution Explorer window to add/manage files
 //   2. Use the Team Explorer window to connect to source control
 //   3. Use the Output window to see build output and other messages
