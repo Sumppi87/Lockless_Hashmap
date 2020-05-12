@@ -31,50 +31,16 @@ public:
 	typedef BucketT<K, V, ParamsBase::COLLISION_SIZE> Bucket;
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATE_STATICALLY>::value>::type* = nullptr>
-	Hash()
-		: m_hash()
-		, m_recycle()
-		, m_usedNodes(0)
-		, seed(GenerateSeed())
-	{
-		for (size_t i = 0; i < ParamsBase::GetMaxElements(); ++i)
-		{
-			m_recycle[i] = &m_keyStorage[i];
-		}
-	}
+	Hash(const size_t seed = 0) noexcept;
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATE_FROM_HEAP>::value>::type* = nullptr>
-	Hash(const size_t max_elements)
-		: ParamsBase(max_elements)
-		, m_hash(ComputeHashKeyCount(max_elements))
-		, m_keyStorage(max_elements)
-		, m_recycle(max_elements)
-		, m_usedNodes(0)
-		, seed(GenerateSeed())
-	{
-		for (size_t i = 0; i < ParamsBase::GetMaxElements(); ++i)
-		{
-			m_recycle[i] = &m_keyStorage[i];
-		}
-	}
+	Hash(const size_t max_elements, const size_t seed = 0);
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATE_FROM_HEAP>::value>::type* = nullptr>
-	Hash(size_t max_elements, Bucket* hash, KeyValue* keyStorage, std::atomic<KeyValue*>* keyRecycle)
-		: ParamsBase(max_elements)
-		, m_hash(ComputeHashKeyCount(max_elements), hash)
-		, m_keyStorage(max_elements, keyStorage)
-		, m_recycle(max_elements, keyRecycle)
-		, m_usedNodes(0)
-		, seed(GenerateSeed())
-	{
-		for (size_t i = 0; i < ParamsBase::GetMaxElements(); ++i)
-		{
-			m_recycle[i] = &m_keyStorage[i];
-		}
-	}
+	Hash(size_t max_elements, Bucket* hash, KeyValue* keyStorage, std::atomic<KeyValue*>* keyRecycle) noexcept;
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATE_FROM_HEAP>::value>::type* = nullptr>
-	constexpr static const size_t NeededHeap(const size_t max_elements)
+	constexpr static const size_t NeededHeap(const size_t max_elements) noexcept
 	{
 		return Container<Bucket, ParamsBase::KEY_COUNT>::NeededHeap(max_elements)
 			+ Container<KeyValue, ParamsBase::MAX_ELEMENTS>::NeededHeap(max_elements)
@@ -84,6 +50,8 @@ public:
 	inline void Add(const K& k, const V& v);
 
 	inline const V Take(const K& k);
+
+	inline bool Take(const K& k, V& v);
 
 	inline void Take(const K& k, const std::function<bool(const V&)>& receiver);
 
@@ -110,16 +78,65 @@ private:
 };
 
 template<typename K, typename V, size_t ... Args>
+template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATE_STATICALLY>::value>::type*>
+Hash<K, V, Args ...>::Hash(const size_t seed /*= 0*/) noexcept
+	: m_hash()
+	, m_recycle()
+	, m_usedNodes(0)
+	, seed(seed == 0 ? GenerateSeed() : seed)
+{
+	for (size_t i = 0; i < ParamsBase::GetMaxElements(); ++i)
+	{
+		m_recycle[i] = &m_keyStorage[i];
+	}
+}
+
+template<typename K, typename V, size_t ... Args>
+template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATE_FROM_HEAP>::value>::type*>
+Hash<K, V, Args ...>::Hash(const size_t max_elements, const size_t seed /*= 0*/)
+	: ParamsBase(max_elements)
+	, m_hash(ComputeHashKeyCount(max_elements))
+	, m_keyStorage(max_elements)
+	, m_recycle(max_elements)
+	, m_usedNodes(0)
+	, seed(seed == 0 ? GenerateSeed() : seed)
+{
+	for (size_t i = 0; i < ParamsBase::GetMaxElements(); ++i)
+	{
+		m_recycle[i] = &m_keyStorage[i];
+	}
+}
+
+template<typename K, typename V, size_t ... Args>
+template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATE_FROM_HEAP>::value>::type*>
+Hash<K, V, Args ...>::Hash(size_t max_elements, Bucket* hash, KeyValue* keyStorage, std::atomic<KeyValue*>* keyRecycle) noexcept
+	: ParamsBase(max_elements)
+	, m_hash(ComputeHashKeyCount(max_elements), hash)
+	, m_keyStorage(max_elements, keyStorage)
+	, m_recycle(max_elements, keyRecycle)
+	, m_usedNodes(0)
+	, seed(GenerateSeed())
+{
+	for (size_t i = 0; i < ParamsBase::GetMaxElements(); ++i)
+	{
+		m_recycle[i] = &m_keyStorage[i];
+	}
+}
+
+template<typename K, typename V, size_t ... Args>
 void Hash<K, V, Args ...>::Add(const K& k, const V& v)
 {
 	const size_t h = hash(k, seed);
-	const size_t index = h % ParamsBase::GetKeyCount();
+	const size_t index = (h & ParamsBase::GetHashMask());
 
 	KeyValue* pKeyValue = GetNextFreeKeyValue();
 	pKeyValue->v = v;
 	pKeyValue->k = KeyHashPair{ h, k };
-	m_hash;
-	m_hash[index].Add(pKeyValue);
+	if (!m_hash[index].Add(pKeyValue))
+	{
+		ReleaseNode(pKeyValue);
+		throw std::bad_alloc();
+	}
 }
 
 
@@ -129,7 +146,7 @@ const V Hash<K, V, Args ...>::Take(const K& k)
 	V ret = V();
 
 	const size_t h = hash(k, seed);
-	const size_t index = h % ParamsBase::GetKeyCount();
+	const size_t index = (h & ParamsBase::GetHashMask());
 	KeyValue* pKeyValue = nullptr;
 	if (m_hash[index].TakeValue(k, h, &pKeyValue))
 	{
@@ -141,21 +158,35 @@ const V Hash<K, V, Args ...>::Take(const K& k)
 	return ret;
 }
 
+template<typename K, typename V, size_t ... Args>
+bool Hash<K, V, Args ...>::Take(const K& k, V& v)
+{
+	const size_t h = hash(k, seed);
+	const size_t index = (h & ParamsBase::GetHashMask());
+	KeyValue* pKeyValue = nullptr;
+	if (m_hash[index].TakeValue(k, h, &pKeyValue))
+	{
+		// Value was found
+		v = pKeyValue->v;
+		ReleaseNode(pKeyValue);
+		return true;
+	}
+	return false;
+}
 
 template<typename K, typename V, size_t ... Args>
 void Hash<K, V, Args ...>::Take(const K& k, const std::function<bool(const V&)>& receiver)
 {
 	const size_t h = hash(k, seed);
-	const size_t index = h % ParamsBase::GetKeyCount();
-	std::function<void(KeyValue*)> release = std::bind(&Hash::ReleaseNode, this, std::placeholders::_1);
+	const size_t index = (h & ParamsBase::GetHashMask());
+	static std::function<void(KeyValue*)> release = std::bind(&Hash::ReleaseNode, this, std::placeholders::_1);
 	m_hash[index].TakeValue(k, h, receiver, release);
 }
 
 template<typename K, typename V, size_t ... Args>
 KeyValueT<K, V>* Hash<K, V, Args ...>::GetNextFreeKeyValue()
 {
-	KeyValue* pRet = nullptr;
-	for (size_t i = m_usedNodes; i < ParamsBase::GetKeyCount(); ++i)
+	for (size_t i = m_usedNodes; i < ParamsBase::GetMaxElements(); ++i)
 	{
 		KeyValue* pExpected = m_recycle[i];
 		if (pExpected == nullptr)
@@ -163,12 +194,11 @@ KeyValueT<K, V>* Hash<K, V, Args ...>::GetNextFreeKeyValue()
 		if (m_recycle[i].compare_exchange_strong(pExpected, nullptr))
 		{
 			pExpected->Reset();
-			pRet = pExpected;
 			m_usedNodes++;
-			break;
+			return pExpected;
 		}
 	}
-	return pRet;
+	throw std::bad_alloc();
 }
 
 template<typename K, typename V, size_t ... Args>

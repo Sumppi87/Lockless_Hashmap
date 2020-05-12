@@ -3,7 +3,16 @@
 #include <random>
 #include <assert.h>
 
-static size_t GenerateSeed()
+// Number of slots in a single bucket
+const size_t MIN_COLLISION_SIZE = 16;
+
+//! \brief Allocate memory from heap
+typedef std::bool_constant<true> ALLOCATE_FROM_HEAP;
+
+//! \brief Allocate memory from statically (i.e. raw arrays)
+typedef std::bool_constant<false> ALLOCATE_STATICALLY;
+
+static size_t GenerateSeed() noexcept
 {
 	constexpr auto sizeof_size_t = sizeof(size_t);
 	static_assert(sizeof_size_t == 4 || sizeof_size_t == 8, "Unsupported platform");
@@ -22,7 +31,7 @@ static size_t GenerateSeed()
 	}
 }
 
-constexpr static size_t GetNextPowerOfTwo(const size_t value)
+constexpr static size_t GetNextPowerOfTwo(const size_t value) noexcept
 {
 	// Algorithm from https://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
 
@@ -38,7 +47,7 @@ constexpr static size_t GetNextPowerOfTwo(const size_t value)
 	return v;
 }
 
-constexpr static size_t ComputeHashKeyCount(const size_t count)
+constexpr static size_t ComputeHashKeyCount(const size_t count) noexcept
 {
 	return GetNextPowerOfTwo(count * 2);
 }
@@ -46,7 +55,6 @@ constexpr static size_t ComputeHashKeyCount(const size_t count)
 template<typename T, size_t SIZE>
 struct Array
 {
-	Array() : _array{} {}
 	static_assert(SIZE > 0, "Size cannot be zero");
 	inline T& operator[](const size_t idx) noexcept
 	{
@@ -69,14 +77,16 @@ struct Array
 template<typename T>
 struct PtrArray
 {
+	constexpr const static auto _T = sizeof(T);
+
 	PtrArray(const size_t size)
-		: _array(new T[size])
+		: _array(new T[size]{})
 		, SIZE(size)
 		, _deleteArray(true)
 	{
 	}
 
-	PtrArray(const size_t size, T* ptr)
+	PtrArray(const size_t size, T* ptr) noexcept
 		: _array(ptr)
 		, SIZE(size)
 		, _deleteArray(false)
@@ -103,7 +113,7 @@ struct PtrArray
 	size_t SIZE;
 	const bool _deleteArray;
 
-	~PtrArray()
+	~PtrArray() noexcept
 	{
 		if (_deleteArray)
 		{
@@ -122,7 +132,7 @@ struct KeyHashPairT
 	__declspec(deprecated("** sizeof(K) is too large for lock-less access, "
 		"define `SKIP_ATOMIC_LOCKLESS_CHECKS´ to suppress this warning **"))
 		static constexpr bool NotLockFree() { return false; }
-	static constexpr bool IsLockFree()
+	static constexpr bool IsLockFree() noexcept
 	{
 #ifndef SKIP_ATOMIC_LOCKLESS_CHECKS
 		if constexpr (sizeof(KeyHashPairT) > 8) { return NotLockFree(); }
@@ -137,16 +147,12 @@ struct KeyHashPairT
 template<typename K, typename V>
 struct KeyValueT
 {
-	KeyValueT() :
-		k(),
-		v() {}
-
 	typedef KeyHashPairT<K> KeyHashPair;
 
 	std::atomic<KeyHashPair> k;
 	V v; // value
 
-	void Reset()
+	inline void Reset() noexcept
 	{
 		k = KeyHashPair();
 		v = V();
@@ -157,21 +163,17 @@ template<typename K, typename V, size_t COLLISION_SIZE>
 class BucketT
 {
 public:
-	BucketT() :
-		m_bucket{ },
-		m_usageCounter(0) {}
-
 	typedef KeyValueT<K, V> KeyValue;
 	typedef KeyHashPairT<K> KeyHashPair;
 
-	void Add(KeyValue* pKeyValue)
+	inline bool Add(KeyValue* pKeyValue) noexcept
 	{
 		const int usage_now = ++m_usageCounter;
 		if (usage_now > COLLISION_SIZE)
 		{
 			// Bucket is full
 			--m_usageCounter;
-			throw std::bad_alloc();
+			return false;
 		}
 
 		bool item_added = false;
@@ -188,11 +190,11 @@ public:
 		if (!item_added)
 		{
 			--m_usageCounter;
-			throw std::bad_alloc();
 		}
+		return item_added;
 	}
 
-	bool TakeValue(const K& k, const size_t hash, KeyValue** ppKeyValue)
+	inline bool TakeValue(const K& k, const size_t hash, KeyValue** ppKeyValue)
 	{
 		if (m_usageCounter == 0)
 			return false;
@@ -225,7 +227,7 @@ public:
 		return true;
 	}
 
-	void TakeValue(const K& k, const size_t hash, const std::function<bool(const V&)>& f, const std::function<void(KeyValue*)>& release)
+	inline void TakeValue(const K& k, const size_t hash, const std::function<bool(const V&)>& f, const std::function<void(KeyValue*)>& release)
 	{
 		if (m_usageCounter == 0)
 			return;
@@ -265,14 +267,6 @@ private:
 	std::atomic<size_t> m_usageCounter; // Keys in bucket
 };
 
-const size_t MIN_COLLISION_SIZE = 16;
-
-//! \brief Allocate memory from heap
-typedef std::bool_constant<true> ALLOCATE_FROM_HEAP;
-
-//! \brief Allocate memory from statically (i.e. raw arrays)
-typedef std::bool_constant<false> ALLOCATE_STATICALLY;
-
 template<typename T, size_t SIZE = 0>
 struct Container :
 	public std::conditional<SIZE == 0, PtrArray<T>, Array<T, SIZE>>::type
@@ -298,7 +292,7 @@ struct Container :
 	}
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATE_STATICALLY>::value>::type* = nullptr>
-	Container(void) {}
+	Container(void) : Base() {}
 
 	Container(Container&&) = delete;
 	Container(Container&) = delete;
@@ -329,19 +323,21 @@ struct StaticParams : public CollisionCalc<COLLISION_SIZE_HINT>, public SizeCalc
 
 	static_assert(Base::MAX_ELEMENTS > 0, "Element count cannot be zero");
 
-	constexpr size_t GetKeyCount() const { return Base::KEY_COUNT; }
-	constexpr size_t GetMaxElements() const { return Base::MAX_ELEMENTS; }
+	constexpr size_t GetKeyCount() const noexcept { return Base::KEY_COUNT; }
+	constexpr size_t GetHashMask() const noexcept { return Base::KEY_COUNT - 1; }
+	constexpr size_t GetMaxElements() const noexcept { return Base::MAX_ELEMENTS; }
 };
 
 template <size_t COLLISION_SIZE_HINT = 0, size_t ... Args>
 struct PtrParams : public CollisionCalc<COLLISION_SIZE_HINT>, public SizeCalculator<Args ...>
 {
-	PtrParams(const size_t count)
+	PtrParams(const size_t count) noexcept
 		: keyCount(ComputeHashKeyCount(count))
 		, maxElements(count) {}
 
-	inline size_t GetKeyCount() const { return keyCount; }
-	inline size_t GetMaxElements() const { return maxElements; }
+	inline size_t GetKeyCount() const noexcept { return keyCount; }
+	inline size_t GetHashMask() const noexcept { return keyCount - 1; }
+	inline size_t GetMaxElements() const noexcept { return maxElements; }
 
 	const size_t keyCount;
 	const size_t maxElements;
