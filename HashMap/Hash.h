@@ -1,6 +1,4 @@
 #pragma once
-#include <atomic>
-#include <type_traits>
 #include <assert.h>
 #include <functional>
 #include "HashFunctions.h"
@@ -13,56 +11,74 @@ static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 
 template<typename K,
 	typename V,
-	size_t ... Args>
-	class Hash : public std::conditional<(sizeof...(Args) > 0),
-	StaticParams<Args ...>, PtrParams<Args ...>>::type
+	typename _Alloc = HeapAllocator<>>
+	class Hash : public _Alloc
 {
 	static_assert(std::is_trivially_copyable<K>::value, "Template type K must be trivially copyable.");
+	static_assert(std::is_base_of<Dummy, _Alloc>::value);
 private:
 	typedef KeyHashPairT<K> KeyHashPair;
-	constexpr static const bool IS_LOCK_FREE = KeyHashPair::IsLockFree();
-	typedef std::bool_constant<sizeof...(Args) == 0> ALLOCATION_TYPE;
-
-	typedef typename std::conditional<(sizeof...(Args) > 0),
-		StaticParams<Args ...>, PtrParams<Args ...>>::type ParamsBase;
+	typedef typename _Alloc::ALLOCATION_TYPE ALLOCATION_TYPE;
 
 public:
 	typedef KeyValueT<K, V> KeyValue;
-	typedef BucketT<K, V, ParamsBase::COLLISION_SIZE> Bucket;
+	typedef BucketT<K, V, _Alloc::COLLISION_SIZE> Bucket;
 
-	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATE_STATICALLY>::value>::type* = nullptr>
-	Hash(const size_t seed = 0) noexcept;
+	constexpr static const bool IS_ALWAYS_LOCK_FREE = KeyValue::IsAlwaysLockFree();
+	typedef typename std::bool_constant<IS_ALWAYS_LOCK_FREE> ALWAYS_LOCK_FREE;
 
-	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATE_FROM_HEAP>::value>::type* = nullptr>
-	Hash(const size_t max_elements, const size_t seed = 0);
+public: // Construction and initialization
+	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_STATIC>::value>::type* = nullptr>
+	inline Hash(const size_t seed = 0) noexcept;
 
-	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATE_FROM_HEAP>::value>::type* = nullptr>
-	Hash(size_t max_elements, Bucket* hash, KeyValue* keyStorage, std::atomic<KeyValue*>* keyRecycle) noexcept;
+	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>
+	inline Hash(const size_t max_elements, const size_t seed = 0);
 
-	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATE_FROM_HEAP>::value>::type* = nullptr>
-	constexpr static const size_t NeededHeap(const size_t max_elements) noexcept
+	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type* = nullptr>
+	inline Hash(const size_t max_elements, Bucket* hash, KeyValue* keyStorage, std::atomic<KeyValue*>* keyRecycle) noexcept;
+
+	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type* = nullptr>
+	inline Hash() noexcept;
+
+	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type* = nullptr>
+	inline bool Init(const size_t max_elements, Bucket* hash, KeyValue* keyStorage, std::atomic<KeyValue*>* keyRecycle) noexcept;
+
+public: // Access functions
+	inline bool Add(const K& k, const V& v) noexcept;
+
+	inline const V Take(const K& k) noexcept;
+
+	inline bool Take(const K& k, V& v) noexcept;
+
+	inline void Take(const K& k, const std::function<bool(const V&)>& receiver) noexcept;
+
+public: // Support functions
+	constexpr static const bool IsAlwaysLockFree() noexcept;
+
+	template<typename LOCK_FREE = ALWAYS_LOCK_FREE, typename std::enable_if<std::is_same<LOCK_FREE, TRUE_TYPE>::value>::type* = nullptr>
+	inline bool IsLockFree() const noexcept;
+
+	template<typename LOCK_FREE = ALWAYS_LOCK_FREE, typename std::enable_if<std::is_same<LOCK_FREE, FALSE_TYPE>::value>::type* = nullptr>
+	inline bool IsLockFree() const noexcept;
+
+	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>
+	inline constexpr static const size_t NeededHeap(const size_t max_elements) noexcept;
+
+	typedef typename std::bool_constant<false> _NOT_SAME_;
+	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value == _NOT_SAME_::value>::type* = nullptr>
+	void Test() const noexcept
 	{
-		return Container<Bucket, ParamsBase::KEY_COUNT>::NeededHeap(max_elements)
-			+ Container<KeyValue, ParamsBase::MAX_ELEMENTS>::NeededHeap(max_elements)
-			+ Container<std::atomic<KeyValue*>, ParamsBase::MAX_ELEMENTS>::NeededHeap(max_elements);
+		std::cout << "Test!";
 	}
 
-	inline void Add(const K& k, const V& v);
-
-	inline const V Take(const K& k);
-
-	inline bool Take(const K& k, V& v);
-
-	inline void Take(const K& k, const std::function<bool(const V&)>& receiver);
+private: // Internal utility functions
+	inline KeyValue* GetNextFreeKeyValue() noexcept;
+	inline void ReleaseNode(KeyValue* pKeyValue) noexcept;
 
 private:
-	inline KeyValue* GetNextFreeKeyValue();
-	inline void ReleaseNode(KeyValue* pKeyValue);
-
-private:
-	Container<Bucket, ParamsBase::KEY_COUNT> m_hash;
-	Container<KeyValue, ParamsBase::MAX_ELEMENTS> m_keyStorage;
-	Container<std::atomic<KeyValue*>, ParamsBase::MAX_ELEMENTS> m_recycle;
+	Container<Bucket, _Alloc::ALLOCATOR, _Alloc::KEY_COUNT> m_hash;
+	Container<KeyValue, _Alloc::ALLOCATOR, _Alloc::MAX_ELEMENTS> m_keyStorage;
+	Container<std::atomic<KeyValue*>, _Alloc::ALLOCATOR, _Alloc::MAX_ELEMENTS> m_recycle;
 	std::atomic<size_t> m_usedNodes;
 
 	const size_t seed;
@@ -77,76 +93,110 @@ private:
 	constexpr static const size_t _bucket = sizeof(Bucket);
 };
 
-template<typename K, typename V, size_t ... Args>
-template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATE_STATICALLY>::value>::type*>
-Hash<K, V, Args ...>::Hash(const size_t seed /*= 0*/) noexcept
+template<typename K, typename V, typename _Alloc>
+template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_STATIC>::value>::type*>
+Hash<K, V, _Alloc>::Hash(const size_t seed /*= 0*/) noexcept
 	: m_hash()
 	, m_recycle()
 	, m_usedNodes(0)
 	, seed(seed == 0 ? GenerateSeed() : seed)
 {
-	for (size_t i = 0; i < ParamsBase::GetMaxElements(); ++i)
+	for (size_t i = 0; i < _Alloc::GetMaxElements(); ++i)
 	{
 		m_recycle[i] = &m_keyStorage[i];
 	}
 }
 
-template<typename K, typename V, size_t ... Args>
-template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATE_FROM_HEAP>::value>::type*>
-Hash<K, V, Args ...>::Hash(const size_t max_elements, const size_t seed /*= 0*/)
-	: ParamsBase(max_elements)
+template<typename K, typename V, typename _Alloc>
+template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type*>
+Hash<K, V, _Alloc>::Hash(const size_t max_elements, const size_t seed /*= 0*/)
+	: _Alloc(max_elements)
 	, m_hash(ComputeHashKeyCount(max_elements))
 	, m_keyStorage(max_elements)
 	, m_recycle(max_elements)
 	, m_usedNodes(0)
 	, seed(seed == 0 ? GenerateSeed() : seed)
 {
-	for (size_t i = 0; i < ParamsBase::GetMaxElements(); ++i)
+	for (size_t i = 0; i < _Alloc::GetMaxElements(); ++i)
 	{
 		m_recycle[i] = &m_keyStorage[i];
 	}
 }
 
-template<typename K, typename V, size_t ... Args>
-template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATE_FROM_HEAP>::value>::type*>
-Hash<K, V, Args ...>::Hash(size_t max_elements, Bucket* hash, KeyValue* keyStorage, std::atomic<KeyValue*>* keyRecycle) noexcept
-	: ParamsBase(max_elements)
-	, m_hash(ComputeHashKeyCount(max_elements), hash)
-	, m_keyStorage(max_elements, keyStorage)
-	, m_recycle(max_elements, keyRecycle)
+template<typename K, typename V, typename _Alloc>
+template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type*>
+Hash<K, V, _Alloc>::Hash(const size_t max_elements, Bucket* hash, KeyValue* keyStorage, std::atomic<KeyValue*>* keyRecycle) noexcept
+	: _Alloc(max_elements)
+	, m_hash(hash, ComputeHashKeyCount(max_elements))
+	, m_keyStorage(keyStorage, max_elements)
+	, m_recycle(keyRecycle, max_elements)
 	, m_usedNodes(0)
 	, seed(GenerateSeed())
 {
-	for (size_t i = 0; i < ParamsBase::GetMaxElements(); ++i)
+	for (size_t i = 0; i < _Alloc::GetMaxElements(); ++i)
 	{
 		m_recycle[i] = &m_keyStorage[i];
 	}
 }
 
-template<typename K, typename V, size_t ... Args>
-void Hash<K, V, Args ...>::Add(const K& k, const V& v)
+template<typename K, typename V, typename _Alloc>
+template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type*>
+Hash<K, V, _Alloc>::Hash() noexcept
+	: _Alloc()
+	, m_usedNodes(0)
+	, seed(GenerateSeed())
 {
-	const size_t h = hash(k, seed);
-	const size_t index = (h & ParamsBase::GetHashMask());
+}
 
+
+template<typename K, typename V, typename _Alloc>
+template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type*>
+bool Hash<K, V, _Alloc>::Init(const size_t max_elements, Bucket* hash, KeyValue* keyStorage, std::atomic<KeyValue*>* keyRecycle) noexcept
+{
+	if (_Alloc::Init(max_elements))
+	{
+		m_hash.Init(hash, ComputeHashKeyCount(max_elements));
+		m_keyStorage.Init(keyStorage, max_elements);
+		m_recycle.Init(keyRecycle, max_elements);
+
+		for (size_t i = 0; i < _Alloc::GetMaxElements(); ++i)
+		{
+			m_recycle[i] = &m_keyStorage[i];
+		}
+		return true;
+	}
+	return false;
+}
+
+template<typename K, typename V, typename _Alloc>
+bool Hash<K, V, _Alloc>::Add(const K& k, const V& v) noexcept
+{
 	KeyValue* pKeyValue = GetNextFreeKeyValue();
+	if (pKeyValue == nullptr)
+		return false;
+
+	const size_t h = hash(k, seed);
+	const size_t index = (h & _Alloc::GetHashMask());
+
+
 	pKeyValue->v = v;
 	pKeyValue->k = KeyHashPair{ h, k };
 	if (!m_hash[index].Add(pKeyValue))
 	{
 		ReleaseNode(pKeyValue);
-		throw std::bad_alloc();
+		return false;
+		//throw std::bad_alloc();
 	}
+	return true;
 }
 
-
-template<typename K, typename V, size_t ... Args>
-const V Hash<K, V, Args ...>::Take(const K& k)
+template<typename K, typename V, typename _Alloc>
+const V Hash<K, V, _Alloc>::Take(const K& k) noexcept
 {
 	V ret = V();
 
 	const size_t h = hash(k, seed);
-	const size_t index = (h & ParamsBase::GetHashMask());
+	const size_t index = (h & _Alloc::GetHashMask());
 	KeyValue* pKeyValue = nullptr;
 	if (m_hash[index].TakeValue(k, h, &pKeyValue))
 	{
@@ -158,11 +208,11 @@ const V Hash<K, V, Args ...>::Take(const K& k)
 	return ret;
 }
 
-template<typename K, typename V, size_t ... Args>
-bool Hash<K, V, Args ...>::Take(const K& k, V& v)
+template<typename K, typename V, typename _Alloc>
+bool Hash<K, V, _Alloc>::Take(const K& k, V& v) noexcept
 {
 	const size_t h = hash(k, seed);
-	const size_t index = (h & ParamsBase::GetHashMask());
+	const size_t index = (h & _Alloc::GetHashMask());
 	KeyValue* pKeyValue = nullptr;
 	if (m_hash[index].TakeValue(k, h, &pKeyValue))
 	{
@@ -174,19 +224,49 @@ bool Hash<K, V, Args ...>::Take(const K& k, V& v)
 	return false;
 }
 
-template<typename K, typename V, size_t ... Args>
-void Hash<K, V, Args ...>::Take(const K& k, const std::function<bool(const V&)>& receiver)
+template<typename K, typename V, typename _Alloc>
+void Hash<K, V, _Alloc>::Take(const K& k, const std::function<bool(const V&)>& receiver) noexcept
 {
 	const size_t h = hash(k, seed);
-	const size_t index = (h & ParamsBase::GetHashMask());
+	const size_t index = (h & _Alloc::GetHashMask());
 	static std::function<void(KeyValue*)> release = std::bind(&Hash::ReleaseNode, this, std::placeholders::_1);
 	m_hash[index].TakeValue(k, h, receiver, release);
 }
 
-template<typename K, typename V, size_t ... Args>
-KeyValueT<K, V>* Hash<K, V, Args ...>::GetNextFreeKeyValue()
+template<typename K, typename V, typename _Alloc>
+constexpr const bool Hash<K, V, _Alloc>::IsAlwaysLockFree() noexcept
 {
-	for (size_t i = m_usedNodes; i < ParamsBase::GetMaxElements(); ++i)
+	return IS_ALWAYS_LOCK_FREE;
+}
+
+template<typename K, typename V, typename _Alloc>
+template<typename LOCK_FREE, typename std::enable_if<std::is_same<LOCK_FREE, TRUE_TYPE>::value>::type*>
+bool Hash<K, V, _Alloc>::IsLockFree() const noexcept
+{
+	return IS_ALWAYS_LOCK_FREE;
+}
+
+template<typename K, typename V, typename _Alloc>
+template<typename LOCK_FREE, typename std::enable_if<std::is_same<LOCK_FREE, FALSE_TYPE>::value>::type*>
+bool Hash<K, V, _Alloc>::IsLockFree() const noexcept
+{
+	static KeyValue k;
+	return k.k.is_lock_free();
+}
+
+template<typename K, typename V, typename _Alloc>
+template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type*>
+constexpr static const size_t Hash<K, V, _Alloc>::NeededHeap(const size_t max_elements) noexcept
+{
+	return Container<Bucket, _Alloc::KEY_COUNT>::NeededHeap(max_elements)
+		+ Container<KeyValue, _Alloc::MAX_ELEMENTS>::NeededHeap(max_elements)
+		+ Container<std::atomic<KeyValue*>, _Alloc::MAX_ELEMENTS>::NeededHeap(max_elements);
+}
+
+template<typename K, typename V, typename _Alloc>
+KeyValueT<K, V>* Hash<K, V, _Alloc>::GetNextFreeKeyValue() noexcept
+{
+	for (size_t i = m_usedNodes; i < _Alloc::GetMaxElements(); ++i)
 	{
 		KeyValue* pExpected = m_recycle[i];
 		if (pExpected == nullptr)
@@ -198,11 +278,11 @@ KeyValueT<K, V>* Hash<K, V, Args ...>::GetNextFreeKeyValue()
 			return pExpected;
 		}
 	}
-	throw std::bad_alloc();
+	return nullptr;
 }
 
-template<typename K, typename V, size_t ... Args>
-void Hash<K, V, Args ...>::ReleaseNode(KeyValue* pKeyValue)
+template<typename K, typename V, typename _Alloc>
+void Hash<K, V, _Alloc>::ReleaseNode(KeyValue* pKeyValue) noexcept
 {
 	for (size_t i = --m_usedNodes;; --i)
 	{
@@ -216,4 +296,3 @@ void Hash<K, V, Args ...>::ReleaseNode(KeyValue* pKeyValue)
 			break; // shouldn't get here
 	}
 }
-
