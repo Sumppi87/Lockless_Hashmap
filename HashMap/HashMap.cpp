@@ -11,6 +11,10 @@
 #include <mutex>
 #include <future>
 
+
+template<typename Hash>
+void TestHash(Hash& a);
+
 struct TT
 {
 	uint16_t a;
@@ -40,7 +44,7 @@ struct Rand
 };
 
 const uint8_t OUTER_ARR_SIZE = 16;
-const uint8_t THREADS = 4;
+const uint8_t THREADS = 8;
 const uint8_t ITEMS_PER_THREAD = OUTER_ARR_SIZE / THREADS;
 static_assert((OUTER_ARR_SIZE % THREADS) == 0);
 const size_t TEST_ARRAY_SIZE = 100000;
@@ -96,8 +100,8 @@ static const bool INIT_ARRAY = []()
 }();
 
 #ifdef TEST_HASHMAP
-//Hash<int, Rand<16>> test2(ITEMS);
-static Hash<int, Rand<16>, 16, ITEMS> test2;
+Hash<int, Rand<16>, HeapAllocator<16>> test2(ITEMS);
+//static Hash<int, Rand<16>, StaticAllocator<ITEMS, 16>> test2;
 #define TESTED "Lockless hashmap"
 #else
 #define TESTED "std::unordered_multimap"
@@ -113,13 +117,14 @@ static auto ProcessData(const unsigned int from, const unsigned int to)
 		for (size_t item = 0; item < TEST_ARRAY_SIZE; ++item)
 		{
 #ifdef TEST_HASHMAP
-			test2.Add(TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v);
+			if (!test2.Add(TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v))
+				assert(0);
 #else
 #if defined(RUN_IN_THREADS)
 			testlock.lock();
 			test.insert({ TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v });
 			testlock.unlock();
-#else 
+#else
 			test.insert({ TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v });
 #endif
 #endif
@@ -227,16 +232,17 @@ static bool ValidateDatas()
 	ret &= ValidateData(0, OUTER_ARR_SIZE);
 #endif
 	return ret;
-	}
+}
 
-constexpr auto _TESTARRAY = sizeof(TEST_ARRAY);
 
 int main()
 {
 #ifndef TEST_HASHMAP
 	test.reserve(ITEMS);
+#else
+	const bool isLockFree = test2.IsLockFree();
 #endif // !TEST_HASHMAP
-	
+
 	ProcessDatas();
 
 	auto start = std::chrono::steady_clock::now();
@@ -333,7 +339,7 @@ int Chrono(Hash& test)
 void TestStatic()
 {
 	auto start = std::chrono::steady_clock::now();
-	static Hash<int, int, 32, 300000> test;
+	static Hash<int, int, StaticAllocator<300000, 32>> test;
 	auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start);
 	std::cout << duration.count() << std::endl;
 	constexpr auto size = sizeof(test) / 1024.0;
@@ -355,6 +361,49 @@ static Test __t[ComputeHashKeyCount(4000000)];
 
 /*int main()
 {
+	{// Heap allocate, with max of 111 elements, default bucket size
+		Hash<TT, int> map(111);
+		constexpr auto isAlwaysLockFree = Hash<TT, int>::IsAlwaysLockFree();
+		const bool isLockFree = map.IsLockFree();
+
+		// Function enabled only if not EXTERNAL
+		map.Test();
+
+		TestHash(map);
+	}
+	{//Use externally provided memory, with max of 12 elements, bucket size of 11
+		constexpr auto elems = 12;
+		typedef Hash<TT, int, ExternalAllocator<11>> SHash;
+		Container<SHash::Bucket, ALLOCATION_TYPE_STATIC::value, ComputeHashKeyCount(elems)> bucket;
+		SHash::KeyValue keys[elems]{};
+		std::atomic<SHash::KeyValue*> keyRecycle[elems];
+		{
+			SHash map(size_t(elems), &bucket[0], &keys[0], &keyRecycle[0]);
+			TestHash(map);
+
+			// Function enabled only if not EXTERNAL
+			// Doesn't compile
+			//
+			// map.Test();
+		}
+		{
+			SHash map;
+			map.Init(size_t(elems), &bucket[0], &keys[0], &keyRecycle[0]);
+			TestHash(map);
+
+			// Function enabled only if not EXTERNAL
+			// Doesn't compile
+			//
+			// map.Test();
+		}
+	}
+	{ // Allocate statically, 111 max elements, default bucket size
+		Hash<TT, int, StaticAllocator<111>> map;
+		TestHash(map);
+
+		// Function enabled only if not EXTERNAL
+		map.Test();
+	}
 	Container<Test> hash(ComputeHashKeyCount(4000000), __t);
 
 	TestStatic();
