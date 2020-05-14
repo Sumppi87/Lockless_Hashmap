@@ -23,8 +23,12 @@ inline size_t hash(const T* key, size_t seed) noexcept
 	return hash(reinterpret_cast<size_t>(key), seed);
 }
 
-template<typename T>
-inline size_t hash(const T& t, size_t seed = 0)
+//template<typename T>
+//inline size_t hash(const T& t, size_t seed = 0) = delete;
+
+template<typename T> inline
+size_t hash(const T &t, size_t seed)
+noexcept(noexcept(hash(t)))
 {
 	return hash(t) ^ seed;
-}
+};

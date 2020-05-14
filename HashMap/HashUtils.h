@@ -34,12 +34,12 @@ static size_t GenerateSeed() noexcept
 
 	std::random_device rd{};
 	// Use Mersenne twister engine to generate pseudo-random numbers.
-	if constexpr (sizeof_size_t == 4)
+	if constexpr (sizeof_size_t == 4U)
 	{
 		std::mt19937 engine{ rd() };
 		return engine();
 	}
-	else if constexpr (sizeof_size_t == 8)
+	else if constexpr (sizeof_size_t == 8U)
 	{
 		std::mt19937_64 engine{ rd() };
 		return engine();
@@ -101,12 +101,12 @@ struct StaticAllocator : public BucketSize <COLLISION_SIZE>, public Allocator<Al
 template<size_t COLLISION_SIZE = MIN_COLLISION_SIZE>
 struct HeapAllocator : public BucketSize <COLLISION_SIZE>, public Allocator<AllocatorType::HEAP>, public Heap
 {
-	HeapAllocator(const size_t count) noexcept
+	explicit HeapAllocator(const size_t count) noexcept
 		: keyCount(ComputeHashKeyCount(count))
 		, maxElements(count) {}
 
 	inline size_t GetKeyCount() const noexcept { return keyCount; }
-	inline size_t GetHashMask() const noexcept { return keyCount - 1; }
+	inline size_t GetHashMask() const noexcept { return GetKeyCount() - 1; }
 	inline size_t GetMaxElements() const noexcept { return maxElements; }
 
 	const size_t keyCount;
@@ -125,7 +125,7 @@ struct ExternalAllocator : public BucketSize <COLLISION_SIZE>, public Allocator<
 		, maxElements(0)
 		, isInitialized(false) {}
 
-	ExternalAllocator(const size_t max_elements) noexcept
+	explicit ExternalAllocator(const size_t max_elements) noexcept
 		: keyCount(ComputeHashKeyCount(max_elements))
 		, maxElements(max_elements)
 		, isInitialized(true) {}
@@ -208,7 +208,7 @@ struct PtrArray : public Array<T>
 {
 	constexpr const static auto _T = sizeof(T);
 
-	PtrArray(const size_t size)
+	explicit PtrArray(const size_t size)
 	{
 		Array<T>::_array = new T[size]{};
 		Array<T>::_size = size;
@@ -295,7 +295,7 @@ public:
 
 	inline bool Add(KeyValue* pKeyValue) noexcept
 	{
-		const int usage_now = ++m_usageCounter;
+		const auto usage_now = ++m_usageCounter;
 		if (usage_now > COLLISION_SIZE)
 		{
 			//
@@ -449,7 +449,7 @@ struct Container :
 	Container(void) = delete;
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>
-	Container(const size_t size)
+	explicit Container(const size_t size)
 		: Base(size) {}
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>

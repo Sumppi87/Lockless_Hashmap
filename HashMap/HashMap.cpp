@@ -44,7 +44,7 @@ struct Rand
 };
 
 const uint8_t OUTER_ARR_SIZE = 16;
-const uint8_t THREADS = 8;
+const uint8_t THREADS = 1;
 const uint8_t ITEMS_PER_THREAD = OUTER_ARR_SIZE / THREADS;
 static_assert((OUTER_ARR_SIZE % THREADS) == 0);
 const size_t TEST_ARRAY_SIZE = 100000;
@@ -234,9 +234,110 @@ static bool ValidateDatas()
 	return ret;
 }
 
+template<
+	size_t SIZE,
+	template<typename T3, T3> class T1
+>
+struct _Test
+{
+	//T1<T2, T2> member;
+};
+
+
+template<
+	template<typename T3, T3> class T1, typename T, T val = T()
+>
+struct __Test
+{
+	typedef typename std::integral_constant<T, val> A;
+
+	typedef std::is_same<A, typename T1<T, val>> IS_SAME;
+	constexpr static const bool isSame = IS_SAME::value;
+	T1<T, val> a;
+};
+
+size_t hash(const std::integral_constant<size_t, 1>& k, const size_t seed)
+{
+	return hash(k.value, seed);
+}
+
+template<typename K, MapMode mode, bool assert = false>
+void TestKey()
+{
+	HashKeyProperties<K, mode> a;
+	constexpr bool _a1 = a.VALID_KEY_TYPE;
+	//constexpr bool _a3 = a.STD_ATOMIC_ALWAYS_LOCK_FREE;
+	//constexpr bool _a4 = a.STD_ATOMIC_AVAILABLE;
+	int i = 0;
+	i = 0;
+
+	if constexpr (assert)
+	{
+		KeyPropertyValidator<K, mode> a;
+	}
+}
+
+template<typename K, MapMode OP_MODE = DefaultModeSelector<K>::MODE>
+struct _TestHash
+{
+	constexpr static const auto _MODE = OP_MODE;
+};
 
 int main()
 {
+	struct Big
+	{
+		//std::string _c;
+		int a : 30;
+		int b : 2;
+		int _val : 1;
+	};
+	constexpr auto _big = sizeof(Big);
+
+	std::integral_constant<size_t, 1>;
+	std::bool_constant<false>;
+	TestKey<int, MapMode::PARALLEL_INSERT_TAKE, true>();
+	TestKey<int, MapMode::PARALLEL_INSERT_READ, true>();
+
+	TestKey<std::string, MapMode::PARALLEL_INSERT_TAKE, false>(); // Fails verification
+	TestKey<std::string, MapMode::PARALLEL_INSERT_READ, true>();
+
+	TestKey<Big, MapMode::PARALLEL_INSERT_TAKE, false>(); // Fails verification
+	TestKey<Big, MapMode::PARALLEL_INSERT_READ, true>();
+
+	TestKey<int[2], MapMode::PARALLEL_INSERT_TAKE, false>(); // Fails verification
+	TestKey<int[2], MapMode::PARALLEL_INSERT_READ, false>(); // Fails verification
+
+	TestKey<std::bool_constant<false>, MapMode::PARALLEL_INSERT_TAKE, true>();
+	TestKey<std::bool_constant<false>, MapMode::PARALLEL_INSERT_READ, true>();
+
+	{
+		_TestHash<std::string> _Test;
+		_Test._MODE;
+		Hash<std::bool_constant<false>, int, HeapAllocator<>, MapMode::PARALLEL_INSERT_READ> __test(1);
+		MultiHash_H<int[2], int> _test_(1);
+		//Hash<Big, int, HeapAllocator<>, MapMode::PARALLEL_INSERT_TAKE_ALLOW_LOCKING> _test(1);
+		int a[2]{};
+		//_test_.Add(a, 1);
+
+		//__test.Add(std::integral_constant<size_t, 1>(), 3);
+		//auto val = __test.Take(std::integral_constant<size_t, 1>());
+		//val = val;
+	}
+	/*HashTraits<std::integral_constant<size_t, 1>, int, HeapAllocator<>>::USE_STD_ATOMIC;
+
+
+	HashTraits<int, std::string, HeapAllocator<>, true> __a;
+	__a.ATOMICS_IN_USE;
+	__a.USE_STD_ATOMIC;
+
+	KeyProperties<std::string>::STD_ATOMIC_USABLE::value;
+	KeyProperties<int>::USE_STD_ATOMIC;*/
+
+	__Test<std::integral_constant, int, 1> a;
+	a.a;
+	a.isSame;
+	//_Test<1, std::integral_constant, int> a;
 #ifndef TEST_HASHMAP
 	test.reserve(ITEMS);
 #else
@@ -251,7 +352,22 @@ int main()
 	auto end = std::chrono::steady_clock::now() - start;
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end);
 	std::cout << "Validation for " << TESTED << " took " << duration.count() << std::endl;
+
+	{// Heap allocate, with max of 111 elements, default bucket size
+		Hash<TT, int> map(111);
+		constexpr auto isAlwaysLockFree = Hash<TT, int>::IsAlwaysLockFree();
+		const bool isLockFree = map.IsLockFree();
+
+		// Function enabled only if not EXTERNAL
+		map.Test();
+
+		TestHash(map);
+	}
+
+	Hash<TT, int> map(111);
+	map.Add({ 1,2,3 }, 1);
 	return 0;
+
 }
 
 bool operator==(const TT& o, const TT& t)
