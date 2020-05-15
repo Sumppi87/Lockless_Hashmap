@@ -540,13 +540,15 @@ public:
 			: _release(nullptr),
 			_bucket(nullptr),
 			_current(nullptr),
-			_h(0) {}
+			_currentIndex(0),
+			_hash(0) {}
 
 		explicit Iterator(Bucket* bucket, const size_t h, const K& k, const std::function<void(KeyValue*)>& release) noexcept
 			: _release(release),
 			_bucket(bucket),
 			_current(nullptr),
-			_h(h),
+			_currentIndex(0),
+			_hash(h),
 			_k(k) {}
 
 		bool TakeNext() noexcept
@@ -555,7 +557,7 @@ public:
 				_release(_current);
 			_current = nullptr;
 
-			return false;
+			return _bucket->TakeValue(_currentIndex, _k, _hash, &_current);
 		}
 
 		V& Value() noexcept { return _current->v; }
@@ -566,9 +568,58 @@ public:
 		Bucket* _bucket;
 		KeyValue* _current;
 		size_t _currentIndex;
-		size_t _h;
+		size_t _hash;
+
 		K _k;
 	};
+
+private:
+
+	// Special implementation for Iterator
+	inline bool TakeValue(size_t& startIndex, const K& k, const size_t hash, KeyValue** ppKeyValue) noexcept
+	{
+		if (m_usageCounter == 0)
+		{
+			return false;
+		}
+
+		for (size_t i = 0; i < COLLISION_SIZE; ++i)
+		{
+			// Check if Bucket was emptied while accessing
+			if (m_usageCounter == 0)
+			{
+				//
+				// FIXME: Add return value
+				//
+				return false;
+			}
+			const size_t actualIdx = (i + startIndex) % COLLISION_SIZE;
+
+			KeyValue* pCandidate = m_bucket[actualIdx];
+			if (pCandidate == nullptr)
+			{
+				continue;
+			}
+			else if (KeyHashPair kp{ hash, k }; pCandidate->k.compare_exchange_strong(kp, KeyHashPair()))
+			{
+				if (!m_bucket[actualIdx].compare_exchange_strong(pCandidate, nullptr))
+				{
+					// This shouldn't be possible
+					//throw std::logic_error("HashMap went booboo");
+					//
+					// FIXME: Add return an enumerated return value
+					//
+					return false;
+				}
+				*ppKeyValue = pCandidate;
+				--m_usageCounter;
+
+				startIndex = ((actualIdx + 1) % COLLISION_SIZE);
+				break;
+			}
+		}
+		return true;
+	}
 
 private:
 	StaticArray<std::atomic<KeyValue*>, COLLISION_SIZE> m_bucket;

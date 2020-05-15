@@ -293,11 +293,11 @@ private:
 
 };
 
-#define _HEAP_ONLY_ template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type*>
-#define _STATIC_ONLY_ template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_STATIC>::value>::type*>
-#define _EXT_ONLY_ template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type*>
+#define _HEAP_ONLY_IMPL template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type*>
+#define STATIC_ONLY_IMPL template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_STATIC>::value>::type*>
+#define EXT_ONLY_IMPL template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type*>
 
-template<typename K, typename V, typename _Alloc, MapMode OP_MODE> _STATIC_ONLY_
+template<typename K, typename V, typename _Alloc, MapMode OP_MODE> STATIC_ONLY_IMPL
 Hash<K, V, _Alloc, OP_MODE>::Hash(const size_t seed /*= 0*/) noexcept
 	: Base()
 	, m_hash()
@@ -311,7 +311,7 @@ Hash<K, V, _Alloc, OP_MODE>::Hash(const size_t seed /*= 0*/) noexcept
 	}*/
 }
 
-template<typename K, typename V, typename _Alloc, MapMode OP_MODE> _HEAP_ONLY_
+template<typename K, typename V, typename _Alloc, MapMode OP_MODE> _HEAP_ONLY_IMPL
 Hash<K, V, _Alloc, OP_MODE>::Hash(const size_t max_elements, const size_t seed /*= 0*/)
 	: Base(max_elements)
 	, _Alloc(max_elements)
@@ -327,7 +327,7 @@ Hash<K, V, _Alloc, OP_MODE>::Hash(const size_t max_elements, const size_t seed /
 	}*/
 }
 
-/*template<typename K, typename V, typename _Alloc, MapMode OP_MODE> _EXT_ONLY_
+/*template<typename K, typename V, typename _Alloc, MapMode OP_MODE> EXT_ONLY_IMPL
 Hash<K, V, _Alloc, OP_MODE>::Hash(const size_t max_elements, Bucket* hash, KeyValue* keyStorage, std::atomic<KeyValue*>* keyRecycle) noexcept
 	: _Alloc(max_elements)
 	, m_hash(hash, ComputeHashKeyCount(max_elements))
@@ -342,7 +342,7 @@ Hash<K, V, _Alloc, OP_MODE>::Hash(const size_t max_elements, Bucket* hash, KeyVa
 	}
 }*/
 
-template<typename K, typename V, typename _Alloc, MapMode OP_MODE> _EXT_ONLY_
+template<typename K, typename V, typename _Alloc, MapMode OP_MODE> EXT_ONLY_IMPL
 Hash<K, V, _Alloc, OP_MODE>::Hash() noexcept
 	: _Alloc()
 	, m_usedNodes(0)
@@ -351,7 +351,7 @@ Hash<K, V, _Alloc, OP_MODE>::Hash() noexcept
 }
 
 
-template<typename K, typename V, typename _Alloc, MapMode OP_MODE> _EXT_ONLY_
+template<typename K, typename V, typename _Alloc, MapMode OP_MODE> EXT_ONLY_IMPL
 bool Hash<K, V, _Alloc, OP_MODE>::Init(const size_t max_elements, Bucket* hash, KeyValue* keyStorage, std::atomic<KeyValue*>* keyRecycle) noexcept
 {
 	if (_Alloc::Init(max_elements))

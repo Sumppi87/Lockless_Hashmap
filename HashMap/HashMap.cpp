@@ -333,7 +333,6 @@ int main()
 	{
 		std::cout << iterRead.Value() << std::endl;
 	}
-	return 0;
 	struct Big
 	{
 		//std::string _c;
@@ -475,6 +474,14 @@ void TestHash(Hash& a)
 	a.Add(t3, 777);
 	a.Add(t3, 4);
 	a.Add(t4, 5);
+
+	KeyIterator iter(a);
+	iter.SetKey(t3);
+	while (iter.Next())
+	{
+		std::cout << "Hello, " << iter.Value() << std::endl;
+	}
+
 	int t3_ = a.Take(t3);
 	auto f = [](const int& obj)
 	{
