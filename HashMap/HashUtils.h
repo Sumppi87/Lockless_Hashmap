@@ -14,6 +14,30 @@ enum class AllocatorType
 	EXTERNAL
 };
 
+enum class MapMode
+{
+	//! \brief
+	// Hash supports following lock-free operations in parallel:
+	//	* Inserting items
+	//	* Reading items with Take functions (i.e. read item is removed from map)
+	//! \constrains	Key of type <K> must fulfill requirements in std::atomic<K> https://en.cppreference.com/w/cpp/atomic/atomic
+	PARALLEL_INSERT_TAKE = 0b001,
+
+	//! \brief
+	// Hash supports following lock-free operations in parallel:
+	//	* Inserting items
+	//	* Reading items with Value functions (i.e. read item is not removed from map)
+	//! \constrains Once an item is inserted into the map, it cannot be removed. Key must fulfill std::is_default_constructible
+	PARALLEL_INSERT_READ = 0b010
+};
+
+//! \brief
+typedef std::integral_constant<MapMode, MapMode::PARALLEL_INSERT_TAKE> MODE_INSERT_TAKE;
+
+//! \brief
+typedef std::integral_constant<MapMode, MapMode::PARALLEL_INSERT_READ> MODE_INSERT_READ;
+
+
 //! \brief Allocate memory from heap
 typedef std::integral_constant<AllocatorType, AllocatorType::HEAP> ALLOCATION_TYPE_HEAP;
 
@@ -286,6 +310,63 @@ struct KeyValueT
 	}
 };
 
+template<typename K, typename V>
+struct LinkedKeyValueT
+{
+	typedef KeyHashPairT<K> KeyHashPair;
+	KeyHashPair k;
+	V v; // value
+
+	std::atomic<LinkedKeyValueT*> pNext;
+
+	constexpr static bool IsAlwaysLockFree() noexcept
+	{
+		return std::atomic<LinkedKeyValueT*>::is_always_lock_free;
+	}
+};
+
+template<typename K, typename V>
+struct LinkedBucketT
+{
+	typedef LinkedKeyValueT<K, V> KeyValue;
+
+	inline bool Add(KeyValue* pKeyValue) noexcept
+	{
+		KeyValue* pNext = nullptr;
+		if (m_pFirst.compare_exchange_strong(pNext, pKeyValue))
+			return true;
+
+		while (pNext)
+		{
+			KeyValue* pExpected = nullptr;
+			if (pNext->pNext.compare_exchange_strong(pExpected, pKeyValue))
+			{
+				return true;
+			}
+			pNext = pExpected;
+		}
+		return false;
+	}
+
+	inline bool Get(const size_t h, const K& k, V& v) noexcept
+	{
+		KeyValue* pNext = m_pFirst;
+		while (pNext)
+		{
+			if ((pNext->k.hash == h) && (pNext->k.key == k))
+			{
+				v = pNext->v;
+				return true;
+			}
+			pNext = pNext->pNext;
+		}
+		return false;
+	}
+
+	std::atomic<KeyValue*> m_pFirst;
+	std::atomic<KeyValue*> m_pLast;
+};
+
 template<typename K, typename V, size_t COLLISION_SIZE>
 class BucketT
 {
@@ -415,20 +496,21 @@ private:
 };
 
 template<typename T, AllocatorType TYPE, size_t SIZE = 0>
-struct Container :
-	public
+struct Container : public
 	std::conditional<std::is_same<std::integral_constant<AllocatorType, TYPE>, ALLOCATION_TYPE_HEAP>::value, // condition of outer
 	PtrArray<T>, // If 1st condition is true
 	typename std::conditional<std::is_same<std::integral_constant<AllocatorType, TYPE>, ALLOCATION_TYPE_STATIC>::value, // Condition of inner (and non-true case of outer)
 	StaticArray<T, SIZE>, // If 2nd condition is true
-	ExtArray<T>>::type>::type // If 2nd condition is false
+	ExtArray<T> // If 2nd condition is false
+	>::type // Extract the type from inner std::conditional
+	>::type // Extract the type from outer std::conditional
 {
 	typedef typename
-	std::conditional<std::is_same<std::integral_constant<AllocatorType, TYPE>, ALLOCATION_TYPE_HEAP>::value, // condition of outer
-	PtrArray<T>, // If 1st condition is true
-	typename std::conditional<std::is_same<std::integral_constant<AllocatorType, TYPE>, ALLOCATION_TYPE_STATIC>::value, // Condition of inner (and non-true case of outer)
-	StaticArray<T, SIZE>, // If 2nd condition is true
-	ExtArray<T>>::type>::type Base;
+		std::conditional<std::is_same<std::integral_constant<AllocatorType, TYPE>, ALLOCATION_TYPE_HEAP>::value, // condition of outer
+		PtrArray<T>, // If 1st condition is true
+		typename std::conditional<std::is_same<std::integral_constant<AllocatorType, TYPE>, ALLOCATION_TYPE_STATIC>::value, // Condition of inner (and non-true case of outer)
+		StaticArray<T, SIZE>, // If 2nd condition is true
+		ExtArray<T>>::type>::type Base;
 
 	typedef std::integral_constant<AllocatorType, TYPE> ALLOCATION_TYPE;
 
@@ -468,4 +550,130 @@ struct Container :
 	Container(Container&) = delete;
 	Container& operator=(Container&) = delete;
 	Container& operator=(Container&&) = delete;*/
+};
+
+
+template<typename K>
+struct GeneralKeyReqs
+{
+	typedef typename std::bool_constant<
+		std::is_default_constructible<K>::value
+		&& std::is_copy_assignable<K>::value> GENERAL_REQS_MET;
+
+	constexpr static const bool VALID_KEY_TYPE = GENERAL_REQS_MET::value;
+
+	constexpr const static bool AssertAll()
+	{
+		static_assert(
+			VALID_KEY_TYPE,
+			"Key type must fulfill std::is_default_constructible<K>::value and std::is_copy_assignable<K>");
+		return true;
+	}
+};
+
+template<typename K, bool CHECK_FOR_ATOMIC_ACCESS>
+struct AtomicsRequired
+{
+	static constexpr const GeneralKeyReqs<K> GENERAL_REQS{};
+
+	typedef typename std::bool_constant<
+		std::is_trivially_copyable<K>::value
+		&& std::is_copy_constructible<K>::value
+		&& std::is_move_constructible<K>::value
+		&& std::is_copy_assignable<K>::value
+		&& std::is_move_assignable<K>::value> STD_ATOMIC_REQS_MET;
+
+	constexpr static const bool STD_ATOMIC_AVAILABLE = STD_ATOMIC_REQS_MET::value;
+
+	constexpr static const bool STD_ATOMIC_ALWAYS_LOCK_FREE = []()
+	{
+		if constexpr (STD_ATOMIC_REQS_MET::value)
+			return std::atomic<K>::is_always_lock_free && std::atomic<KeyHashPairT<K>>::is_always_lock_free;
+		return false;
+	}();
+
+	constexpr static const bool VALID_KEY_TYPE =
+		GENERAL_REQS.VALID_KEY_TYPE
+		&& STD_ATOMIC_AVAILABLE
+		&& ((CHECK_FOR_ATOMIC_ACCESS && STD_ATOMIC_ALWAYS_LOCK_FREE)
+			|| !CHECK_FOR_ATOMIC_ACCESS);
+
+	typedef std::bool_constant<CHECK_FOR_ATOMIC_ACCESS> CHECK_TYPE;
+
+	template<typename TYPE = CHECK_TYPE, typename std::enable_if<std::is_same<TYPE, TRUE_TYPE>::value>::type* = nullptr>
+	__declspec(deprecated("** sizeof(K) is too large for lock-less access, "
+		"define `SKIP_ATOMIC_LOCKLESS_CHECKS´ to suppress this warning **"))
+		constexpr static bool NotLockFree() { return false; }
+
+	template<typename TYPE = CHECK_TYPE, typename std::enable_if<std::is_same<TYPE, FALSE_TYPE>::value>::type* = nullptr>
+	constexpr static bool NotLockFree() { return false; }
+
+	constexpr static bool IsAlwaysLockFree() noexcept
+	{
+#ifndef SKIP_ATOMIC_LOCKLESS_CHECKS
+		if constexpr (!STD_ATOMIC_ALWAYS_LOCK_FREE) { return NotLockFree(); }
+#else
+#pragma message("Warning: Hash-map lockless operations are not guaranteed, "
+		"remove define `SKIP_ATOMIC_LO-CKLESS_CHECKS` to ensure lock-less access")
+#endif
+		return true;
+	}
+
+
+	constexpr const static bool AssertAll()
+	{
+		GENERAL_REQS.AssertAll();
+
+		static_assert(
+			STD_ATOMIC_AVAILABLE,
+			"In MapMode::PARALLEL_INSERT_TAKE mode, key-type must fulfill std::atomic requirements.");
+
+		IsAlwaysLockFree();
+
+		return true;
+	}
+};
+
+template<typename K, MapMode OP_MODE>
+struct HashKeyProperties :
+	public std::conditional<std::is_same<std::integral_constant<MapMode, OP_MODE>, MODE_INSERT_TAKE>::value,
+	AtomicsRequired<K, true>,
+	GeneralKeyReqs<K>>::type
+{
+	typedef typename std::integral_constant<MapMode, OP_MODE> MODE;
+
+	typedef typename
+		std::conditional<std::is_same<std::integral_constant<MapMode, OP_MODE>, MODE_INSERT_TAKE>::value,
+		AtomicsRequired<K, true>,
+		GeneralKeyReqs<K>>::type Base;
+
+	constexpr static const bool VALID_KEY_TYPE = Base::VALID_KEY_TYPE;
+
+	constexpr static bool IsValidKeyForMode()
+	{
+		return VALID_KEY_TYPE;
+	}
+
+	constexpr const static bool AssertAll()
+	{
+		return Base::AssertAll();
+	}
+};
+
+template<typename K, MapMode OP_MODE>
+struct KeyPropertyValidator : public HashKeyProperties<K, OP_MODE>
+{
+	typedef typename HashKeyProperties<K, OP_MODE> KeyProps;
+	static_assert(KeyProps::AssertAll(), "Hash key failed to meet requirements");
+};
+
+template<typename K>
+struct DefaultModeSelector
+{
+	constexpr static const MapMode MODE = std::conditional<
+		AtomicsRequired<K, false>::STD_ATOMIC_AVAILABLE, // Check if requirements for std::atomic is met by K
+		MODE_INSERT_TAKE, // If requirements are met
+		MODE_INSERT_READ // If requirements are not met
+	>::type // Extract type selected by std::conditional (i.e. MODE_INSERT_TAKE or MODE_INSERT_TAKE>
+		::value; // Extract actual type from selected mode
 };
