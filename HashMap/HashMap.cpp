@@ -14,6 +14,7 @@
 
 template<typename Hash>
 void TestHash(Hash& a);
+void someTests();
 
 struct TT
 {
@@ -43,11 +44,11 @@ struct Rand
 	uint32_t data[SIZE];
 };
 
-const uint8_t OUTER_ARR_SIZE = 16;
-const uint8_t THREADS = 1;
+const uint8_t OUTER_ARR_SIZE = 24;
+const uint8_t THREADS = 12;
 const uint8_t ITEMS_PER_THREAD = OUTER_ARR_SIZE / THREADS;
 static_assert((OUTER_ARR_SIZE % THREADS) == 0);
-const size_t TEST_ARRAY_SIZE = 100000;
+const size_t TEST_ARRAY_SIZE = 10000;
 constexpr const size_t ITEMS = OUTER_ARR_SIZE * TEST_ARRAY_SIZE;
 
 TT_WriteItem<int, Rand<16>> TEST_ARRAY[OUTER_ARR_SIZE][TEST_ARRAY_SIZE];
@@ -100,8 +101,8 @@ static const bool INIT_ARRAY = []()
 }();
 
 #ifdef TEST_HASHMAP
-Hash<int, Rand<16>, HeapAllocator<16>> test2(ITEMS);
-//static Hash<int, Rand<16>, StaticAllocator<ITEMS, 16>> test2;
+//Hash<int, Rand<16>, HeapAllocator<20>> test2(ITEMS);
+//static Hash<int, Rand<16>, StaticAllocator<ITEMS, 20>> test2;
 #define TESTED "Lockless hashmap"
 #else
 #define TESTED "std::unordered_multimap"
@@ -109,7 +110,8 @@ std::mutex testlock;
 std::unordered_multimap<int, Rand<16>> test;
 #endif
 
-static auto ProcessData(const unsigned int from, const unsigned int to)
+
+static auto ProcessData(const unsigned int from, const unsigned int to, Hash<int, Rand<16>, HeapAllocator<32>>& map)
 {
 	auto start = std::chrono::steady_clock::now();
 	for (auto index = from; index < to; ++index)
@@ -117,7 +119,7 @@ static auto ProcessData(const unsigned int from, const unsigned int to)
 		for (size_t item = 0; item < TEST_ARRAY_SIZE; ++item)
 		{
 #ifdef TEST_HASHMAP
-			if (!test2.Add(TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v))
+			if (!map.Add(TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v))
 				assert(0);
 #else
 #if defined(RUN_IN_THREADS)
@@ -136,14 +138,14 @@ static auto ProcessData(const unsigned int from, const unsigned int to)
 	return duration;
 }
 
-static void ProcessDatas()
+static void ProcessDatas(Hash<int, Rand<16>, HeapAllocator<32>>& map)
 {
 	auto start = std::chrono::steady_clock::now();
 
 #ifdef RUN_IN_THREADS
 	std::vector<std::future<std::chrono::milliseconds>> vec;
 	for (auto i = 0; i < THREADS; ++i)
-		vec.push_back(std::async(std::launch::async, ProcessData, i * ITEMS_PER_THREAD, i * ITEMS_PER_THREAD + ITEMS_PER_THREAD));
+		vec.push_back(std::async(std::launch::async, ProcessData, i * ITEMS_PER_THREAD, i * ITEMS_PER_THREAD + ITEMS_PER_THREAD, std::ref(map)));
 	for (auto& v : vec)
 		v.wait();
 
@@ -161,7 +163,7 @@ static void ProcessDatas()
 	std::cout << "Total execution time: " << duration.count() << std::endl;
 }
 
-static bool ValidateData(const unsigned int from, const unsigned int to)
+static bool ValidateData(const unsigned int from, const unsigned int to, Hash<int, Rand<16>, HeapAllocator<32>>& map)
 {
 	auto start = std::chrono::steady_clock::now();
 
@@ -183,7 +185,7 @@ static bool ValidateData(const unsigned int from, const unsigned int to)
 
 			const auto tt = TEST_ARRAY[thread][item];
 #ifdef TEST_HASHMAP
-			test2.Take(tt.key, receiver);
+			map.Take(tt.key, receiver);
 #else
 			vals = test.count(tt.key);
 			res[0] = test.find(tt.key)->second;
@@ -209,14 +211,14 @@ static bool ValidateData(const unsigned int from, const unsigned int to)
 	return OK;
 }
 
-static bool ValidateDatas()
+static bool ValidateDatas(Hash<int, Rand<16>, HeapAllocator<32>>& map)
 {
 	bool ret = true;
 
 #if defined(RUN_IN_THREADS) //&& defined(TEST_HASHMAP)
 	std::vector<std::future<bool>> vec;
 	for (auto i = 0; i < THREADS; ++i)
-		vec.push_back(std::async(std::launch::async, ValidateData, i * ITEMS_PER_THREAD, i * ITEMS_PER_THREAD + ITEMS_PER_THREAD));
+		vec.push_back(std::async(std::launch::async, ValidateData, i * ITEMS_PER_THREAD, i * ITEMS_PER_THREAD + ITEMS_PER_THREAD, std::ref(map)));
 
 	for (auto& v : vec)
 		v.wait();
@@ -285,6 +287,53 @@ struct _TestHash
 
 int main()
 {
+	/*auto iters = 1000;
+	for (auto i = 0; i < iters; ++i)
+	{
+		Hash<int, Rand<16>, HeapAllocator<32>> map(ITEMS);
+		ProcessDatas(map);
+
+		auto start = std::chrono::steady_clock::now();
+		bool ret = ValidateDatas(map);
+		std::cout << "Validation result " << (ret ? "OK" : "ERROR") << std::endl;
+		auto end = std::chrono::steady_clock::now() - start;
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end);
+		std::cout << "Validation for " << TESTED << " took " << duration.count() << std::endl;
+	}*/
+	Hash<std::string, int> str_(100);
+	std::string s("1");
+	KeyIterator iterRead(str_);
+	iterRead.SetKey(s);
+	iterRead.Next();
+
+	int* p = nullptr;
+	int& ref = *(int*)nullptr;
+
+	TT tt_{ 1,2,3 };
+	Hash<TT, int> TT_(100);
+	TT_.Add(tt_, 1);
+	KeyIterator iterTake(TT_);
+	iterTake.SetKey(tt_);
+	iterTake.Next();
+
+	str_.Add("1", 1);
+	str_.Add("1", 12);
+	str_.Add("1", 123);
+	str_.Add("1", 1234);
+	str_.Add("1", 12345);
+	str_.Add("1", 123456);
+	auto _v = str_.Read("");
+	auto __v = str_.Read("1");
+	while (iterRead.Next())
+	{
+		std::cout << iterRead.Value() << std::endl;
+	}
+	iterRead.Reset();
+	while (iterRead.Next())
+	{
+		std::cout << iterRead.Value() << std::endl;
+	}
+	return 0;
 	struct Big
 	{
 		//std::string _c;
@@ -292,10 +341,7 @@ int main()
 		int b : 2;
 		int _val : 1;
 	};
-	constexpr auto _big = sizeof(Big);
 
-	std::integral_constant<size_t, 1>;
-	std::bool_constant<false>;
 	TestKey<int, MapMode::PARALLEL_INSERT_TAKE, true>();
 	TestKey<int, MapMode::PARALLEL_INSERT_READ, true>();
 
@@ -341,17 +387,19 @@ int main()
 #ifndef TEST_HASHMAP
 	test.reserve(ITEMS);
 #else
-	const bool isLockFree = test2.IsLockFree();
+	//const bool isLockFree = test2.IsLockFree();
 #endif // !TEST_HASHMAP
 
-	ProcessDatas();
+#ifndef _DEBUG
+	/*ProcessDatas();
 
 	auto start = std::chrono::steady_clock::now();
 	bool ret = ValidateDatas();
 	std::cout << "Validation result " << (ret ? "OK" : "ERROR") << std::endl;
 	auto end = std::chrono::steady_clock::now() - start;
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end);
-	std::cout << "Validation for " << TESTED << " took " << duration.count() << std::endl;
+	std::cout << "Validation for " << TESTED << " took " << duration.count() << std::endl;*/
+#endif
 
 	{// Heap allocate, with max of 111 elements, default bucket size
 		Hash<TT, int> map(111);
@@ -366,8 +414,9 @@ int main()
 
 	Hash<TT, int> map(111);
 	map.Add({ 1,2,3 }, 1);
-	return 0;
 
+	someTests();
+	return 0;
 }
 
 bool operator==(const TT& o, const TT& t)
@@ -475,8 +524,9 @@ void TestHeap()
 typedef BucketT<int, int, 32> Test;
 static Test __t[ComputeHashKeyCount(4000000)];
 
-/*int main()
+void someTests()
 {
+	Hash<int, int> a(Hash<int, int>(1));
 	{// Heap allocate, with max of 111 elements, default bucket size
 		Hash<TT, int> map(111);
 		constexpr auto isAlwaysLockFree = Hash<TT, int>::IsAlwaysLockFree();
@@ -492,9 +542,22 @@ static Test __t[ComputeHashKeyCount(4000000)];
 		typedef Hash<TT, int, ExternalAllocator<11>> SHash;
 		Container<SHash::Bucket, ALLOCATION_TYPE_STATIC::value, ComputeHashKeyCount(elems)> bucket;
 		SHash::KeyValue keys[elems]{};
+
+		typedef typename std::integral_constant<MapMode, MapMode::PARALLEL_INSERT_TAKE> MODE;
+
+		typedef typename std::conditional<
+			std::is_same<MODE, MODE_INSERT_TAKE>::value, // Check the operation mode of the map
+			KeyValueT<TT, int>, // If requirements are met
+			LinkedKeyValueT<TT, int>  // If requirements are not met
+		>::type // Extract type selected by std::conditional (i.e. MODE_INSERT_TAKE or MODE_INSERT_TAKE>
+			KeyValueTest; // Extract actual type from selected mode
+
+		KeyValueTest keys_[elems]{};
+		constexpr auto same = std::is_same< SHash::KeyValue, KeyValueTest>::value;
 		std::atomic<SHash::KeyValue*> keyRecycle[elems];
 		{
-			SHash map(size_t(elems), &bucket[0], &keys[0], &keyRecycle[0]);
+			SHash map;
+			map.Init(size_t(elems), &bucket[0], &keys[0], &keyRecycle[0]);
 			TestHash(map);
 
 			// Function enabled only if not EXTERNAL
@@ -520,7 +583,6 @@ static Test __t[ComputeHashKeyCount(4000000)];
 		// Function enabled only if not EXTERNAL
 		map.Test();
 	}
-	Container<Test> hash(ComputeHashKeyCount(4000000), __t);
 
 	TestStatic();
 	TestHeap();
@@ -543,14 +605,8 @@ static Test __t[ComputeHashKeyCount(4000000)];
 	{
 		Hash<int, int> test(912);
 		constexpr auto size = sizeof(test);
-		constexpr auto heap = Hash<int, int>::NeededHeap(912) / 1024.0;
+		//constexpr auto heap = Hash<int, int>::NeededHeap(912) / 1024.0;
 		Chrono(test);
-	}
-	{
-		Container<int> heap(1001);
-		Container<bool, 10> _static;
-		std::cout << heap[9] << std::endl;
-		std::cout << _static[9] << std::endl;
 	}
 	{
 		MultiHash_S<int, int, 912> test;
@@ -627,9 +683,9 @@ static Test __t[ComputeHashKeyCount(4000000)];
 		c = c;
 	}
 	{
-		Hash<int, int, 8, 100> t;
+		Hash<int, int, StaticAllocator<100, 8>> t;
 		constexpr auto t_ = sizeof(t);
-		Hash<int, std::string, 8, 1000> v;
+		Hash<int, std::string, StaticAllocator<1000, 8>> v;
 		constexpr auto v_ = sizeof(v);
 		t.Add(rand(), 2);
 		int b = 3;
@@ -641,24 +697,16 @@ static Test __t[ComputeHashKeyCount(4000000)];
 		std::string test = v.Take(29382);
 	}
 	{
-		//Hash<TT, int>::Bucket bucket[ComputeHashKeyCount(100)]{};
-		Container< Hash<TT, int>::Bucket> bucket(ComputeHashKeyCount(100));
-		Hash<TT, int>::KeyValue keys[100]{};
-		std::atomic<Hash<TT, int>::KeyValue*> keyRecycle[100];
-		Hash<TT, int> a(size_t(100), &bucket[0], &keys[0], &keyRecycle[0]);
-		TestHash(a);
-	}
-	{
 		Hash<TT, int> a(100);
 		TestHash(a);
 	}
 
 	{
-		Hash<TT, int, 8, 100> a;
+		Hash<TT, int, StaticAllocator<100, 8>> a;
 		TestHash(a);
 	}
 	std::cout << "Hello World!\n";
-}*/
+}
 
 // Run program: Ctrl + F5 or Debug > Start Without Debugging menu
 // Debug program: F5 or Debug > Start Debugging menu

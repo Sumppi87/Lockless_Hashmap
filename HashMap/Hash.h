@@ -69,6 +69,9 @@ struct InsertReadBase
 	EXT_ONLY(_Alloc) InsertReadBase() noexcept {}
 };
 
+// Iterator for specific keys
+template<typename _Hash>
+class KeyIterator;
 
 
 template<typename K, typename V, typename _Alloc = HeapAllocator<>, MapMode OP_MODE = DefaultModeSelector<K>::MODE>
@@ -208,6 +211,86 @@ private:
 	//	constexpr static const size_t _recycle = sizeof(m_recycle);
 	constexpr static const size_t _key = sizeof(KeyValue);
 	constexpr static const size_t _bucket = sizeof(Bucket);
+
+	friend class KeyIterator<Hash<K, V, _Alloc, OP_MODE>>;
+};
+
+template<typename _Hash>
+class KeyIterator
+{
+	typedef typename _Hash::KeyType K;
+	typedef typename _Hash::ValueType V;
+	typedef typename _Hash::Bucket Bucket;
+	typedef typename Bucket::Iterator Iterator;
+
+public:
+	explicit KeyIterator(_Hash& hash) noexcept
+		: _hash(hash)
+		, _h(0)
+		, _bucket(nullptr)
+		, _keyValue(nullptr) {}
+
+	~KeyIterator()
+	{
+		if (_keyValue)
+			_hash.ReleaseNode(_keyValue);
+	}
+
+	KeyIterator& SetKey(const K& k) noexcept
+	{
+		_k = k;
+		_h = hash(k, _hash.seed);
+		const size_t index = (_h & _hash.GetHashMask());
+		_bucket = &_hash.m_hash[index];
+
+		SetIter();
+		return *this;
+	}
+
+	//! \brief Resets the iterator back to initial position (i.e. Same as calling SetKey again)
+	KeyIterator& Reset() noexcept
+	{
+		SetIter();
+		return *this;
+	}
+
+	MODE_READ_ONLY(_Hash::MODE) inline const bool Next() noexcept
+	{
+		return _iter.ReadNext();
+	}
+
+	MODE_TAKE_ONLY(_Hash::MODE)inline const bool Next() noexcept
+	{
+		return _iter.TakeNext();
+	}
+
+	V& Value() noexcept { return _iter.Value(); }
+	const V& Value() const noexcept { return _iter.Value();; }
+
+private:
+	MODE_READ_ONLY(_Hash::MODE) inline void SetIter() noexcept
+	{
+		_iter = Iterator(_bucket, _h, _k);
+	}
+
+	MODE_TAKE_ONLY(_Hash::MODE) inline void SetIter() noexcept
+	{
+		_release = [=](typename _Hash::KeyValue* pKey) {_hash.ReleaseNode(pKey); };
+		_iter = Iterator(_bucket, _h, _k, _release);
+	}
+private:
+	_Hash& _hash;
+	Iterator _iter;
+	K _k;
+	size_t _h;
+	typename _Hash::Bucket* _bucket;
+	typename _Hash::KeyValue* _keyValue;
+
+	std::function<void(typename _Hash::KeyValue*)> _release;
+#ifdef _DEBUG
+	std::atomic<size_t> _counter;
+#endif // !_DEBUG
+
 };
 
 #define _HEAP_ONLY_ template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type*>

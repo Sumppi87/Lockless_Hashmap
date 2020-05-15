@@ -350,21 +350,62 @@ struct LinkedBucketT
 
 	inline bool Get(const size_t h, const K& k, V& v) noexcept
 	{
-		KeyValue* pNext = m_pFirst;
-		while (pNext)
+		if (KeyValue* keyValue = GetKeyValue(m_pFirst, h, k))
 		{
-			if ((pNext->k.hash == h) && (pNext->k.key == k))
-			{
-				v = pNext->v;
-				return true;
-			}
-			pNext = pNext->pNext;
+			v = keyValue->v;
+			return true;
 		}
 		return false;
 	}
 
+	inline static KeyValue* GetKeyValue(KeyValue* pNext, const size_t h, const K& k) noexcept
+	{
+		while (pNext)
+		{
+			if ((pNext->k.hash == h) && (pNext->k.key == k))
+			{
+				break;
+			}
+			pNext = pNext->pNext;
+		}
+		return pNext;
+	}
+
+	class Iterator
+	{
+	public:
+		typedef LinkedBucketT<K, V> Bucket;
+
+		Iterator() noexcept
+			: _bucket(nullptr), _current(nullptr), _h(0) {}
+
+		explicit Iterator(Bucket* bucket, const size_t h, const K& k) noexcept
+			: _bucket(bucket), _current(nullptr), _h(h), _k(k) {}
+
+		bool ReadNext() noexcept
+		{
+			KeyValue* keyValue = (_current == nullptr) ? (_current = _bucket->m_pFirst) : (_current->pNext.load());
+			if (KeyValue* next = GetKeyValue(keyValue, _h, _k))
+			{
+				_current = next;
+				return true;
+			}
+
+			return false;
+		}
+
+		V& Value() noexcept { return _current->v; }
+		const V& Value() const noexcept { return _current->v; }
+
+	private:
+		Bucket* _bucket;
+		KeyValue* _current;
+		size_t _h;
+		K _k;
+	};
+
+private:
 	std::atomic<KeyValue*> m_pFirst;
-	std::atomic<KeyValue*> m_pLast;
 };
 
 template<typename K, typename V, size_t COLLISION_SIZE>
@@ -489,6 +530,45 @@ public:
 			}
 		}
 	}
+
+	class Iterator
+	{
+	public:
+		typedef BucketT<K, V, COLLISION_SIZE> Bucket;
+
+		Iterator() noexcept
+			: _release(nullptr),
+			_bucket(nullptr),
+			_current(nullptr),
+			_h(0) {}
+
+		explicit Iterator(Bucket* bucket, const size_t h, const K& k, const std::function<void(KeyValue*)>& release) noexcept
+			: _release(release),
+			_bucket(bucket),
+			_current(nullptr),
+			_h(h),
+			_k(k) {}
+
+		bool TakeNext() noexcept
+		{
+			if (_current)
+				_release(_current);
+			_current = nullptr;
+
+			return false;
+		}
+
+		V& Value() noexcept { return _current->v; }
+		const V& Value() const noexcept { return _current->v; }
+
+	private:
+		std::function<void(KeyValue*)> _release;
+		Bucket* _bucket;
+		KeyValue* _current;
+		size_t _currentIndex;
+		size_t _h;
+		K _k;
+	};
 
 private:
 	StaticArray<std::atomic<KeyValue*>, COLLISION_SIZE> m_bucket;
