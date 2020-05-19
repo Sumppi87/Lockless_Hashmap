@@ -158,17 +158,17 @@ struct HeapAllocator : public BucketSize <COLLISION_SIZE>, public Allocator<Allo
 template<size_t COLLISION_SIZE = MIN_COLLISION_SIZE>
 struct ExternalAllocator : public BucketSize <COLLISION_SIZE>, public Allocator<AllocatorType::EXTERNAL>, public External
 {
-	ExternalAllocator() noexcept
+	inline ExternalAllocator() noexcept
 		: keyCount(0)
 		, maxElements(0)
 		, isInitialized(false) {}
 
-	explicit ExternalAllocator(const size_t max_elements) noexcept
+	inline explicit ExternalAllocator(const size_t max_elements) noexcept
 		: keyCount(ComputeHashKeyCount(max_elements))
 		, maxElements(max_elements)
 		, isInitialized(true) {}
 
-	bool Init(const size_t max_elements) noexcept
+	inline bool Init(const size_t max_elements) noexcept
 	{
 		bool initialized = false;
 		if (isInitialized.compare_exchange_strong(initialized, true))
@@ -252,7 +252,7 @@ struct PtrArray : public Array<T>
 		Array<T>::_size = size;
 	}
 
-	~PtrArray() noexcept
+	inline ~PtrArray() noexcept
 	{
 		delete[] Array<T>::_array;
 		Array<T>::_array = nullptr;
@@ -264,12 +264,12 @@ struct ExtArray : public Array<T>
 {
 	constexpr const static auto _T = sizeof(T);
 
-	ExtArray(T* array, const size_t size) noexcept
+	inline ExtArray(T* array, const size_t size) noexcept
 	{
 		Init(array, size);
 	}
 
-	void Init(T* ptr, const size_t size) noexcept
+	inline void Init(T* ptr, const size_t size) noexcept
 	{
 		memset(ptr, 0, size * sizeof(T));
 		Array<T>::_array = ptr;
@@ -435,7 +435,7 @@ struct BucketLinkedList
 		K _k;
 	};
 
-	~BucketLinkedList()
+	inline ~BucketLinkedList()
 	{
 		KeyValue* pDelete = m_pFirst;
 		while (pDelete)
@@ -854,22 +854,22 @@ struct Container : public
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type* = nullptr>
 	//Container(void) noexcept {}// : Base() { Base::Init(nullptr, 0); }
-	Container(void) noexcept : Base(nullptr, 0) {}// { Base::Init(nullptr, 0); }
+	inline Container(void) noexcept : Base(nullptr, 0) {}// { Base::Init(nullptr, 0); }
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type* = nullptr>
-	Container(T* ptr, const size_t size) noexcept : Base(ptr, size) {}
+	inline Container(T* ptr, const size_t size) noexcept : Base(ptr, size) {}
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type* = nullptr>
-	void Init(T* ptr, const size_t size) noexcept
+	inline void Init(T* ptr, const size_t size) noexcept
 	{
 		Base::Init(ptr, size);
 	}
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>
-	Container(void) = delete;
+	inline Container(void) = delete;
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>
-	explicit Container(const size_t size)
+	inline Container(const size_t size)
 		: Base(size) {}
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>
@@ -879,7 +879,7 @@ struct Container : public
 	}
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_STATIC>::value>::type* = nullptr>
-	Container(void) noexcept : Base() {}
+	inline Container(void) noexcept : Base() {}
 
 	// FIXME:	Check usage of copy/move assignment/constructor
 	//			-> Can be enabled in some types?
