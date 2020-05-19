@@ -50,9 +50,6 @@ public:
 	typedef typename Base::KeyValue KeyValue;
 	typedef typename Base::Bucket Bucket;
 
-	constexpr static const bool IS_ALWAYS_LOCK_FREE = KeyValue::IsAlwaysLockFree();
-	typedef typename std::bool_constant<IS_ALWAYS_LOCK_FREE> ALWAYS_LOCK_FREE;
-
 public: // Construction and initialization
 	STATIC_ONLY(AT) inline explicit Hash(const size_t seed = 0) noexcept;
 
@@ -78,10 +75,6 @@ public: // Access functions
 public: // Support functions
 	constexpr static const bool IsAlwaysLockFree() noexcept;
 
-	template<typename LOCK_FREE = ALWAYS_LOCK_FREE, typename std::enable_if<std::is_same<LOCK_FREE, TRUE_TYPE>::value>::type* = nullptr>
-	inline bool IsLockFree() const noexcept;
-
-	template<typename LOCK_FREE = ALWAYS_LOCK_FREE, typename std::enable_if<std::is_same<LOCK_FREE, FALSE_TYPE>::value>::type* = nullptr>
 	inline bool IsLockFree() const noexcept;
 
 private: // Internal utility functions
@@ -275,22 +268,21 @@ void Hash<K, V, _Alloc, OP_MODE>::Take(const K& k, const std::function<bool(cons
 template<typename K, typename V, typename _Alloc, MapMode OP_MODE>
 constexpr const bool Hash<K, V, _Alloc, OP_MODE>::IsAlwaysLockFree() noexcept
 {
-	return IS_ALWAYS_LOCK_FREE;
+	return KeyValue::IsAlwaysLockFree();
 }
 
 template<typename K, typename V, typename _Alloc, MapMode OP_MODE>
-template<typename LOCK_FREE, typename std::enable_if<std::is_same<LOCK_FREE, TRUE_TYPE>::value>::type*>
 bool Hash<K, V, _Alloc, OP_MODE>::IsLockFree() const noexcept
 {
-	return IS_ALWAYS_LOCK_FREE;
-}
-
-template<typename K, typename V, typename _Alloc, MapMode OP_MODE>
-template<typename LOCK_FREE, typename std::enable_if<std::is_same<LOCK_FREE, FALSE_TYPE>::value>::type*>
-bool Hash<K, V, _Alloc, OP_MODE>::IsLockFree() const noexcept
-{
-	static KeyValue k;
-	return k.k.is_lock_free();
+	if constexpr (KeyValue::IsAlwaysLockFree())
+	{
+		return true;
+	}
+	else
+	{
+		static KeyValue k;
+		return k.k.is_lock_free();
+	}
 }
 
 template<typename K, typename V, typename _Alloc, MapMode OP_MODE> MODE_TAKE_ONLY_IMPL

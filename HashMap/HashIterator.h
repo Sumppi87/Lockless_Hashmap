@@ -27,8 +27,8 @@ public:
 
 private:
 	MODE_READ_ONLY(_Hash::MODE) inline void SetIter() noexcept;
-
 	MODE_TAKE_ONLY(_Hash::MODE) inline void SetIter() noexcept;
+
 private:
 	_Hash& _hash;
 	Iterator _iter;
@@ -41,7 +41,6 @@ private:
 #if defined(_DEBUG) || defined(VALIDATE_ITERATOR_NON_CONCURRENT_ACCESS)
 	std::atomic<size_t> _counter;
 #endif // !_DEBUG
-
 };
 
 template<typename _Hash>
