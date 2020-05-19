@@ -241,10 +241,6 @@ struct KeyValueInsertRead
 template<typename K, typename V>
 struct KeyValueLinkedList : public KeyValueInsertRead<K, V>
 {
-	//typedef KeyHashPairT<K> KeyHashPair;
-	//KeyHashPair k;
-	//V v; // value
-
 	std::atomic<KeyValueLinkedList*> pNext;
 
 	constexpr static bool IsAlwaysLockFree() noexcept
@@ -757,8 +753,7 @@ struct Container : public
 	typedef std::integral_constant<AllocatorType, TYPE> ALLOCATION_TYPE;
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type* = nullptr>
-	//Container(void) noexcept {}// : Base() { Base::Init(nullptr, 0); }
-	inline Container(void) noexcept : Base(nullptr, 0) {}// { Base::Init(nullptr, 0); }
+	inline Container(void) noexcept : Base(nullptr, 0) {}
 
 	template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type* = nullptr>
 	inline Container(T* ptr, const size_t size) noexcept : Base(ptr, size) {}
