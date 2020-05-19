@@ -51,10 +51,10 @@ struct Rand
 };
 
 const uint8_t OUTER_ARR_SIZE = 24;
-const uint8_t THREADS = 12;
+const uint8_t THREADS = 6;
 const uint8_t ITEMS_PER_THREAD = OUTER_ARR_SIZE / THREADS;
 static_assert((OUTER_ARR_SIZE % THREADS) == 0);
-const size_t TEST_ARRAY_SIZE = 10000;
+const size_t TEST_ARRAY_SIZE = 85000;
 constexpr const size_t ITEMS = OUTER_ARR_SIZE * TEST_ARRAY_SIZE;
 
 TT_WriteItem<int, Rand<16>> TEST_ARRAY[OUTER_ARR_SIZE][TEST_ARRAY_SIZE];
@@ -116,8 +116,11 @@ std::mutex testlock;
 std::unordered_multimap<int, Rand<16>> test;
 #endif
 
-
+#ifdef TEST_HASHMAP
 static auto ProcessData(const unsigned int from, const unsigned int to, Hash<int, Rand<16>, HeapAllocator<32>>& map)
+#else
+static auto ProcessData(const unsigned int from, const unsigned int to, std::unordered_multimap<int, Rand<16>>& map)
+#endif
 {
 	auto start = std::chrono::steady_clock::now();
 	for (auto index = from; index < to; ++index)
@@ -130,7 +133,7 @@ static auto ProcessData(const unsigned int from, const unsigned int to, Hash<int
 #else
 #if defined(RUN_IN_THREADS)
 			testlock.lock();
-			test.insert({ TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v });
+			map.insert({ TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v });
 			testlock.unlock();
 #else
 			test.insert({ TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v });
@@ -144,7 +147,8 @@ static auto ProcessData(const unsigned int from, const unsigned int to, Hash<int
 	return duration;
 }
 
-static void ProcessDatas(Hash<int, Rand<16>, HeapAllocator<32>>& map)
+template<typename Map>
+static void ProcessDatas(Map& map)
 {
 	auto start = std::chrono::steady_clock::now();
 
@@ -169,7 +173,11 @@ static void ProcessDatas(Hash<int, Rand<16>, HeapAllocator<32>>& map)
 	std::cout << "Total execution time: " << duration.count() << std::endl;
 }
 
+#ifdef TEST_HASHMAP
 static bool ValidateData(const unsigned int from, const unsigned int to, Hash<int, Rand<16>, HeapAllocator<32>>& map)
+#else
+static bool ValidateData(const unsigned int from, const unsigned int to, std::unordered_multimap<int, Rand<16>>& map)
+#endif
 {
 	auto start = std::chrono::steady_clock::now();
 
@@ -193,8 +201,8 @@ static bool ValidateData(const unsigned int from, const unsigned int to, Hash<in
 #ifdef TEST_HASHMAP
 			map.Take(tt.key, receiver);
 #else
-			vals = test.count(tt.key);
-			res[0] = test.find(tt.key)->second;
+			vals = map.count(tt.key);
+			res[0] = map.find(tt.key)->second;
 #endif
 			bool ok = (vals == 1) && (memcmp(res[0].data, tt.v.data, sizeof(tt.v.data)) == 0);
 			//bool ok = (vals == 1) && (res[0].data == tt.v.data);
@@ -210,22 +218,26 @@ static bool ValidateData(const unsigned int from, const unsigned int to, Hash<in
 	static std::mutex std_cout_lock;
 	{
 		std::lock_guard locker(std_cout_lock);
-		std::cout << unsigned int(from / ITEMS_PER_THREAD) << " - Validation execution time: " << duration.count() << std::endl;
+		std::cout << int(from / ITEMS_PER_THREAD) << " - Validation execution time: " << duration.count() << std::endl;
 	}
 #endif //  RUN_IN_THREAD
 
 	return OK;
 }
 
-static bool ValidateDatas(Hash<int, Rand<16>, HeapAllocator<32>>& map)
+template<typename Map>
+static bool ValidateDatas(Map& map)
 {
 	bool ret = true;
 
 #if defined(RUN_IN_THREADS) //&& defined(TEST_HASHMAP)
 	std::vector<std::future<bool>> vec;
 	for (auto i = 0; i < THREADS; ++i)
+//#ifdef TEST_HASHMAP
 		vec.push_back(std::async(std::launch::async, ValidateData, i * ITEMS_PER_THREAD, i * ITEMS_PER_THREAD + ITEMS_PER_THREAD, std::ref(map)));
-
+//#else
+	//	vec.push_back(std::async(std::launch::async, ValidateData, i * ITEMS_PER_THREAD, i * ITEMS_PER_THREAD + ITEMS_PER_THREAD, std::ref(map)));
+//#endif
 	for (auto& v : vec)
 		v.wait();
 
@@ -285,32 +297,55 @@ void TestKey()
 	}
 }
 
-template<typename K, typename V, typename _Alloc = HeapAllocator<>, MapMode OP_MODE = DefaultModeSelector<K, _Alloc>::MODE>
-//MapMode OP_MODE = MapMode::PARALLEL_INSERT_TAKE>
-class MAP :
-	public _Alloc,
-	public std::conditional<
-	IS_INSERT_READ_FROM_HEAP(OP_MODE), // Check the operation mode of the map
-	BaseAllocateItemsFromHeap<K, V, _Alloc>, // Inherit if requirements are met
-	HashBaseNormal<K, V, _Alloc, IS_INSERT_TAKE(OP_MODE)>  // Inherit if requirements are not met
-	>::type
-{
-public:
-	typedef typename std::conditional<
-		IS_INSERT_READ_FROM_HEAP(OP_MODE), // Check the operation mode of the map
-		BaseAllocateItemsFromHeap<K, V, _Alloc>, // Inherit if requirements are met
-		HashBaseNormal<K, V, _Alloc, IS_INSERT_TAKE(OP_MODE)>  // Inherit if requirements are not met
-	>::type Base;
-
-	MAP() : _Alloc(0), Base(3), m_hash(1){}
-
-	constexpr static const KeyPropertyValidator<K, OP_MODE> VALIDATOR{};
-	typedef typename Base::Bucket Bucket;
-	Container<Bucket, _Alloc::ALLOCATOR, _Alloc::KEY_COUNT> m_hash;
-};
-
 int main()
 {
+	std::cout << std::endl;
+	try
+	{
+		auto iters = 0;
+		for (auto i = 1;; ++i)
+		{
+			break;
+			std::cout << "*************************************************" << std::endl;
+			std::cout << "************************************** iteration: " << std::to_string(i) << std::endl;
+#ifdef TEST_HASHMAP
+			//Hash<int, Rand<16>, HeapAllocator<20>> test2(ITEMS);
+			//static Hash<int, Rand<16>, StaticAllocator<ITEMS, 20>> test2;
+			Hash<int, Rand<16>, HeapAllocator<32>> map(ITEMS);
+			ProcessDatas(map);
+#else
+			std::mutex testlock;
+			std::unordered_multimap<int, Rand<16>> map;
+			map.reserve(ITEMS);
+			ProcessDatas(map);
+#endif
+			auto start = std::chrono::steady_clock::now();
+			bool ret = ValidateDatas(map);
+			std::cout << "Validation result " << (ret ? "OK" : "ERROR") << std::endl;
+			auto end = std::chrono::steady_clock::now() - start;
+			auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end);
+			std::cout << "Validation for " << TESTED << " took " << duration.count() << std::endl;
+			std::cout << "###################################### iteration: " << std::to_string(i) << std::endl;
+			std::cout << "#################################################" << std::endl;
+
+			if (!ret)
+				return -1;
+		}
+
+		if (iters)
+			return 0;
+	}
+	catch (std::bad_alloc& alloc)
+	{
+		std::cerr << alloc.what() << std::endl;
+		return -1;
+	}
+	catch (...)
+	{
+		std::cerr << "Unknown exception" << std::endl;
+		return -1;
+	}
+
 	someTests();
 	{
 		KeyValueLinkedList<std::string, int> test;
@@ -469,6 +504,7 @@ void TestHash(Hash& a)
 	a.Add(t4, 5);
 
 	KeyIterator iter(a);
+	TRACE << typeid(KeyIterator).name() << std::endl;
 	iter.SetKey(t3);
 	while (iter.Next())
 	{
@@ -528,9 +564,6 @@ void someTests()
 		Hash<TT, int> map(111);
 		constexpr auto isAlwaysLockFree = Hash<TT, int>::IsAlwaysLockFree();
 		const bool isLockFree = map.IsLockFree();
-
-		// Function enabled only if not EXTERNAL
-		map.Test();
 
 		TestHash(map);
 	}
