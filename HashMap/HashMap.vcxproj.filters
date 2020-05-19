@@ -38,5 +38,14 @@
     <ClInclude Include="HashIterator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="UtilityFunctions.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HashDefines.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="HashBase.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

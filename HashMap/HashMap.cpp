@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include "Hash.h"
+#include "HashIterator.h"
 #include "MultiHash.h"
 #include <chrono>
 #include <map>

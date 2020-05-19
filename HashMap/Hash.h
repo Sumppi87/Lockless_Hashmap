@@ -3,15 +3,13 @@
 #include <functional>
 #include "HashFunctions.h"
 #include "HashUtils.h"
+#include "UtilityFunctions.h"
+#include "HashBase.h"
 
 static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 
 #define C17 __cplusplus >= 201703L
 #define C14 __cplusplus >= 201402L
-
-#define HEAP_ONLY(ALLOC) template<typename AT = ALLOC::ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>
-#define STATIC_ONLY(ALLOC) template<typename AT = ALLOC::ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_STATIC>::value>::type* = nullptr>
-#define EXT_ONLY(ALLOC) template<typename AT = ALLOC::ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type* = nullptr>
 
 //#define MODE_READ_ONLY(_MODE) template<typename _M = _MODE, typename std::enable_if<std::is_same<_M, MODE_INSERT_READ>::value>::type* = nullptr>
 #define MODE_READ_ONLY(_MODE) template<typename _M = _MODE, typename std::enable_if<std::is_same<_M, MODE_INSERT_READ>::value || std::is_same<_M, MODE_INSERT_READ_HEAP_BUCKET>::value>::type* = nullptr>
@@ -22,79 +20,11 @@ static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 #define IS_INSERT_READ_FROM_HEAP(x) std::is_same<std::integral_constant<MapMode, x>, MODE_INSERT_READ_HEAP_BUCKET>::value
 
 
-template<typename K, typename V, typename _Alloc, bool MODE_INSERT_TAKE>
-struct HashBaseNormal
-{
-	static_assert(_Alloc::COLLISION_SIZE > 0, "!! LOGIC ERROR !! Collision bucket cannot be zero in this implementation");
-
-	typedef typename _Alloc::ALLOCATION_TYPE ALLOCATION_TYPE;
-	typedef KeyHashPairT<K> KeyHashPair;
-
-	// Mode dependent typedefs
-	typedef typename std::conditional<MODE_INSERT_TAKE,
-		KeyValueInsertTake<K, V>,
-		KeyValueInsertRead<K, V>
-	>::type
-		KeyValue;
-
-	typedef typename std::conditional<MODE_INSERT_TAKE,
-		BucketInsertTake<K, V, _Alloc::COLLISION_SIZE>,
-		BucketInsertRead<K, V, _Alloc::COLLISION_SIZE>
-	>::type
-		Bucket;
-
-	STATIC_ONLY(_Alloc) explicit HashBaseNormal() noexcept
-		: m_recycle()
-	{
-		for (size_t i = 0; i < _Alloc::GetMaxElements(); ++i)
-		{
-			m_recycle[i] = &m_keyStorage[i];
-		}
-	}
-
-	HEAP_ONLY(_Alloc) explicit HashBaseNormal(const size_t max_elements)
-		: m_keyStorage(max_elements)
-		, m_recycle(max_elements)
-	{
-		for (size_t i = 0; i < max_elements; ++i)
-		{
-			m_recycle[i] = &m_keyStorage[i];
-		}
-	}
-
-	EXT_ONLY(_Alloc) HashBaseNormal() noexcept
-	{
-	}
-
-	Container<KeyValue, _Alloc::ALLOCATOR, _Alloc::MAX_ELEMENTS> m_keyStorage;
-	Container<std::atomic<KeyValue*>, _Alloc::ALLOCATOR, _Alloc::MAX_ELEMENTS> m_recycle;
-
-	constexpr static const size_t _keys = sizeof(m_keyStorage);
-	constexpr static const size_t _recycle = sizeof(m_recycle);
-};
-
-template<typename K, typename V, typename _Alloc>
-struct BaseAllocateItemsFromHeap
-{
-	typedef typename _Alloc::ALLOCATION_TYPE ALLOCATION_TYPE;
-	typedef KeyHashPairT<K> KeyHashPair;
-	typedef KeyValueLinkedList<K, V> KeyValue;
-	typedef BucketLinkedList<K, V> Bucket;
-
-	STATIC_ONLY(_Alloc) BaseAllocateItemsFromHeap() {}
-
-	HEAP_ONLY(_Alloc) explicit BaseAllocateItemsFromHeap(const size_t) {}
-
-	EXT_ONLY(_Alloc) BaseAllocateItemsFromHeap() noexcept {}
-};
-
 // Iterator for specific keys
 template<typename _Hash>
 class KeyIterator;
 
-
 template<typename K, typename V, typename _Alloc = HeapAllocator<>, MapMode OP_MODE = DefaultModeSelector<K, _Alloc>::MODE>
-//MapMode OP_MODE = MapMode::PARALLEL_INSERT_TAKE>
 class Hash :
 	public _Alloc,
 	public std::conditional<
@@ -108,12 +38,8 @@ class Hash :
 		BaseAllocateItemsFromHeap<K, V, _Alloc>, // Inherit if requirements are met
 		HashBaseNormal<K, V, _Alloc, IS_INSERT_TAKE(OP_MODE)>  // Inherit if requirements are not met
 	>::type Base;
-
-	constexpr static const KeyPropertyValidator<K, OP_MODE> VALIDATOR{};
-
-	static_assert(std::is_base_of<Dummy, _Alloc>::value);
 private:
-	typedef typename _Alloc::ALLOCATION_TYPE ALLOCATION_TYPE;
+	typedef typename _Alloc::ALLOCATION_TYPE AT;
 
 	typedef typename std::integral_constant<MapMode, OP_MODE> MODE;
 	typedef typename K KeyType;
@@ -128,13 +54,13 @@ public:
 	typedef typename std::bool_constant<IS_ALWAYS_LOCK_FREE> ALWAYS_LOCK_FREE;
 
 public: // Construction and initialization
-	STATIC_ONLY(_Alloc) inline explicit Hash(const size_t seed = 0) noexcept;
+	STATIC_ONLY(AT) inline explicit Hash(const size_t seed = 0) noexcept;
 
-	HEAP_ONLY(_Alloc) inline Hash(const size_t max_elements, const size_t seed = 0);
+	HEAP_ONLY(AT) inline Hash(const size_t max_elements, const size_t seed = 0);
 
-	EXT_ONLY(_Alloc) inline Hash() noexcept;
+	EXT_ONLY(AT) inline Hash() noexcept;
 
-	EXT_ONLY(_Alloc) inline bool Init(const size_t max_elements, Bucket* hash, KeyValue* keyStorage, std::atomic<KeyValue*>* keyRecycle) noexcept;
+	EXT_ONLY(AT) inline bool Init(const size_t max_elements, Bucket* hash, KeyValue* keyStorage, std::atomic<KeyValue*>* keyRecycle) noexcept;
 
 public: // Access functions
 	inline bool Add(const K& k, const V& v) noexcept;
@@ -203,6 +129,10 @@ private:
 	constexpr static const size_t _bucket = sizeof(Bucket);
 
 	friend class KeyIterator<Hash<K, V, _Alloc, OP_MODE>>;
+
+	// Validate
+	constexpr static const KeyPropertyValidator<K, OP_MODE> VALIDATOR{};
+	static_assert(std::is_base_of<Dummy, _Alloc>::value);
 };
 
 #define HEAP_ONLY_IMPL template<typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type*>
