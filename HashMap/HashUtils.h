@@ -28,7 +28,17 @@ enum class MapMode
 	//	* Inserting items
 	//	* Reading items with Value functions (i.e. read item is not removed from map)
 	//! \constrains Once an item is inserted into the map, it cannot be removed. Key must fulfill std::is_default_constructible
-	PARALLEL_INSERT_READ = 0b010
+	PARALLEL_INSERT_READ = 0b010,
+
+	//! \brief	Special case of Hash-map, where number of inserted elements is not limited
+	//!			Inserted key-value pairs are stored in heap, which is allocated at insertion time
+	//! \Note	This operation mode heap allocates, regardless of what Allocator has been chosen.
+	//!			However, hashing map is constant size, so adding a large number of items to small hash map can affect performance
+	// \details Hash supports following lock-free operations in parallel:
+	//	* Inserting items
+	//	* Reading items with Value functions (i.e. read item is not removed from map)
+	//! \constrains Once an item is inserted into the map, it cannot be removed. Key must fulfill std::is_default_constructible
+	PARALLEL_INSERT_READ_GROW_FROM_HEAP = 0b100
 };
 
 //! \brief
@@ -37,6 +47,8 @@ typedef std::integral_constant<MapMode, MapMode::PARALLEL_INSERT_TAKE> MODE_INSE
 //! \brief
 typedef std::integral_constant<MapMode, MapMode::PARALLEL_INSERT_READ> MODE_INSERT_READ;
 
+//! \brief Special case of PARALLEL_INSERT_READ
+typedef std::integral_constant<MapMode, MapMode::PARALLEL_INSERT_READ_GROW_FROM_HEAP> MODE_INSERT_READ_HEAP_BUCKET;
 
 //! \brief Allocate memory from heap
 typedef std::integral_constant<AllocatorType, AllocatorType::HEAP> ALLOCATION_TYPE_HEAP;
@@ -95,6 +107,8 @@ template<size_t COLLISION_SIZE = MIN_COLLISION_SIZE>
 struct BucketSize
 {
 	constexpr static const size_t COLLISION_SIZE = COLLISION_SIZE;
+
+	typedef typename std::integral_constant<size_t, COLLISION_SIZE> BUCKET_SIZE;
 };
 
 struct Dummy {};
@@ -275,7 +289,7 @@ struct KeyHashPairT
 // FIXME: Add support for utilizing CHECK_FOR_ATOMIC_ACCESS
 //
 template<typename K, typename V, bool CHECK_FOR_ATOMIC_ACCESS = true>
-struct KeyValueT
+struct KeyValueInsertTake
 {
 	typedef KeyHashPairT<K> KeyHashPair;
 
@@ -311,24 +325,34 @@ struct KeyValueT
 };
 
 template<typename K, typename V>
-struct LinkedKeyValueT
+struct KeyValueInsertRead
 {
 	typedef KeyHashPairT<K> KeyHashPair;
 	KeyHashPair k;
 	V v; // value
 
-	std::atomic<LinkedKeyValueT*> pNext;
+	constexpr static bool IsAlwaysLockFree() noexcept { return false; }
+};
+
+template<typename K, typename V>
+struct KeyValueLinkedList : public KeyValueInsertRead<K, V>
+{
+	//typedef KeyHashPairT<K> KeyHashPair;
+	//KeyHashPair k;
+	//V v; // value
+
+	std::atomic<KeyValueLinkedList*> pNext;
 
 	constexpr static bool IsAlwaysLockFree() noexcept
 	{
-		return std::atomic<LinkedKeyValueT*>::is_always_lock_free;
+		return std::atomic<KeyValueLinkedList*>::is_always_lock_free;
 	}
 };
 
 template<typename K, typename V>
-struct LinkedBucketT
+struct BucketLinkedList
 {
-	typedef LinkedKeyValueT<K, V> KeyValue;
+	typedef KeyValueLinkedList<K, V> KeyValue;
 
 	inline bool Add(KeyValue* pKeyValue) noexcept
 	{
@@ -374,15 +398,15 @@ struct LinkedBucketT
 	class Iterator
 	{
 	public:
-		typedef LinkedBucketT<K, V> Bucket;
+		typedef BucketLinkedList<K, V> Bucket;
 
-		Iterator() noexcept
+		inline Iterator() noexcept
 			: _bucket(nullptr), _current(nullptr), _h(0) {}
 
-		explicit Iterator(Bucket* bucket, const size_t h, const K& k) noexcept
+		inline explicit Iterator(Bucket* bucket, const size_t h, const K& k) noexcept
 			: _bucket(bucket), _current(nullptr), _h(h), _k(k) {}
 
-		bool ReadNext() noexcept
+		inline bool Next() noexcept
 		{
 			KeyValue* keyValue = (_current == nullptr) ? (_current = _bucket->m_pFirst) : (_current->pNext.load());
 			if (KeyValue* next = GetKeyValue(keyValue, _h, _k))
@@ -394,8 +418,15 @@ struct LinkedBucketT
 			return false;
 		}
 
-		V& Value() noexcept { return _current->v; }
-		const V& Value() const noexcept { return _current->v; }
+		inline V& Value() noexcept
+		{
+			return _current->v;
+		}
+
+		inline const V& Value() const noexcept
+		{
+			return _current->v;
+		}
 
 	private:
 		Bucket* _bucket;
@@ -404,15 +435,187 @@ struct LinkedBucketT
 		K _k;
 	};
 
+	~BucketLinkedList()
+	{
+		KeyValue* pDelete = m_pFirst;
+		while (pDelete)
+		{
+			KeyValue* next = pDelete->pNext;
+			delete pDelete;
+			pDelete = next;
+		}
+	}
+
 private:
 	std::atomic<KeyValue*> m_pFirst;
 };
 
 template<typename K, typename V, size_t COLLISION_SIZE>
-class BucketT
+class BucketInsertRead
 {
 public:
-	typedef KeyValueT<K, V> KeyValue;
+	typedef KeyValueInsertRead<K, V> KeyValue;
+	typedef KeyHashPairT<K> KeyHashPair;
+
+	inline bool Add(KeyValue* pKeyValue) noexcept
+	{
+		// Increment the usage counter atomically -> Guarantees that only one thread gets a certain index
+		const auto myIndex = m_usageCounter++;
+		if (myIndex >= COLLISION_SIZE)
+		{
+			//
+			// FIXME: Add return value
+			//
+			// Bucket is full
+			--m_usageCounter;
+			return false;
+		}
+		KeyValue* pExpected = nullptr;
+		const bool ret = m_bucket[myIndex].compare_exchange_strong(pExpected, pKeyValue);
+#ifdef _DEBUG
+		if (!ret)
+		{
+			assert(0);
+		}
+#endif // _DEBUG
+		return ret; // On release build, compiler will optimize "ret" away, and directly returns
+	}
+
+	inline bool ReadValue(const size_t hash, const K& k, V& v) noexcept
+	{
+		KeyValue* keyval = nullptr;
+		if (ReadValue(k, hash, &keyval))
+		{
+			v = keyval->v;
+			return true;
+		}
+		return false;
+	}
+
+	inline bool ReadValue(const size_t hash, const K& k, KeyValue** ppKeyValue) noexcept
+	{
+		if (m_usageCounter == 0)
+			return false;
+
+		for (size_t i = 0; i < COLLISION_SIZE; ++i)
+		{
+			KeyValue* pCandidate = m_bucket[i];
+			if (pCandidate == nullptr)
+			{
+				break; // No more items
+			}
+			else if (pCandidate->k.hash == hash && pCandidate->k.key == k)
+			{
+				(*ppKeyValue) = pCandidate;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	inline void ReadValues(const size_t hash,
+		const K& k,
+		const std::function<bool(const V&)>& f) noexcept
+	{
+		if (m_usageCounter == 0)
+			return;
+
+		for (size_t i = 0; i < COLLISION_SIZE; ++i)
+		{
+			KeyValue* pCandidate = m_bucket[i];
+			if (pCandidate == nullptr)
+			{
+				break;
+			}
+			else if (pCandidate->k.hash == hash && pCandidate->k.key == k)
+			{
+				if (!f(pCandidate->v))
+					break;
+			}
+		}
+	}
+
+	class Iterator
+	{
+	public:
+		typedef BucketInsertRead<K, V, COLLISION_SIZE> Bucket;
+
+		inline Iterator() noexcept
+			: _bucket(nullptr)
+			, _current(nullptr)
+			, _currentIndex(0)
+			, _hash(0) {}
+
+		inline explicit Iterator(Bucket* bucket, const size_t h, const K& k) noexcept
+			: _bucket(bucket)
+			, _current(nullptr)
+			, _currentIndex(0)
+			, _hash(h)
+			, _k(k) {}
+
+		inline bool Next() noexcept
+		{
+			_current = nullptr;
+			return _bucket->ReadValueFromIndex(_currentIndex, _hash, _k, &_current);
+		}
+
+		inline V& Value() noexcept
+		{
+			return _current->v;
+		}
+
+		inline const V& Value() const noexcept
+		{
+			return _current->v;
+		}
+
+	private:
+		Bucket* _bucket;
+		KeyValue* _current;
+		size_t _currentIndex;
+		size_t _hash;
+
+		K _k;
+	};
+
+private:
+	// Special implementation for Iterator
+	inline bool ReadValueFromIndex(size_t& startIndex, const size_t hash, const K& k, KeyValue** ppKeyValue) noexcept
+	{
+		if (m_usageCounter == 0)
+		{
+			return false;
+		}
+
+		for (size_t i = 0; i < COLLISION_SIZE; ++i)
+		{
+			const size_t actualIdx = (i + startIndex) % COLLISION_SIZE;
+
+			KeyValue* pCandidate = m_bucket[actualIdx];
+			if (pCandidate == nullptr)
+			{
+				break;
+			}
+			else if (pCandidate->k.hash == hash && pCandidate->k.key == k)
+			{
+				(*ppKeyValue) = pCandidate;
+				startIndex = ((actualIdx + 1) % COLLISION_SIZE);
+				return true;
+			}
+		}
+		return false;
+	}
+
+private:
+	StaticArray<std::atomic<KeyValue*>, COLLISION_SIZE> m_bucket;
+	std::atomic<size_t> m_usageCounter; // Keys in bucket
+};
+
+template<typename K, typename V, size_t COLLISION_SIZE>
+class BucketInsertTake
+{
+public:
+	typedef KeyValueInsertTake<K, V> KeyValue;
 	typedef KeyHashPairT<K> KeyHashPair;
 
 	inline bool Add(KeyValue* pKeyValue) noexcept
@@ -428,22 +631,18 @@ public:
 			return false;
 		}
 
-		bool item_added = false;
 		for (size_t i = 0; i < COLLISION_SIZE; ++i)
 		{
 			KeyValue* pExpected = nullptr;
 			if (m_bucket[i].compare_exchange_strong(pExpected, pKeyValue))
 			{
-				item_added = true;
-				break;
+				return true;
 			} // else index already in use
 		}
 
-		if (!item_added)
-		{
-			--m_usageCounter;
-		}
-		return item_added;
+		// Item was not added
+		--m_usageCounter;
+		return false;
 	}
 
 	inline bool TakeValue(const K& k, const size_t hash, KeyValue** ppKeyValue) noexcept
@@ -480,10 +679,10 @@ public:
 				}
 				*ppKeyValue = pCandidate;
 				--m_usageCounter;
-				break;
+				return true;
 			}
 		}
-		return true;
+		return false;
 	}
 
 	inline void TakeValue(const K& k,
@@ -534,16 +733,16 @@ public:
 	class Iterator
 	{
 	public:
-		typedef BucketT<K, V, COLLISION_SIZE> Bucket;
+		typedef BucketInsertTake<K, V, COLLISION_SIZE> Bucket;
 
-		Iterator() noexcept
+		inline Iterator() noexcept
 			: _release(nullptr),
 			_bucket(nullptr),
 			_current(nullptr),
 			_currentIndex(0),
 			_hash(0) {}
 
-		explicit Iterator(Bucket* bucket, const size_t h, const K& k, const std::function<void(KeyValue*)>& release) noexcept
+		inline explicit Iterator(Bucket* bucket, const size_t h, const K& k, const std::function<void(KeyValue*)>& release) noexcept
 			: _release(release),
 			_bucket(bucket),
 			_current(nullptr),
@@ -551,7 +750,7 @@ public:
 			_hash(h),
 			_k(k) {}
 
-		bool TakeNext() noexcept
+		inline bool Next() noexcept
 		{
 			if (_current)
 				_release(_current);
@@ -560,8 +759,15 @@ public:
 			return _bucket->TakeValue(_currentIndex, _k, _hash, &_current);
 		}
 
-		V& Value() noexcept { return _current->v; }
-		const V& Value() const noexcept { return _current->v; }
+		inline V& Value() noexcept
+		{
+			return _current->v;
+		}
+
+		inline const V& Value() const noexcept
+		{
+			return _current->v;
+		}
 
 	private:
 		std::function<void(KeyValue*)> _release;
@@ -611,14 +817,15 @@ private:
 					//
 					return false;
 				}
+
 				*ppKeyValue = pCandidate;
 				--m_usageCounter;
 
 				startIndex = ((actualIdx + 1) % COLLISION_SIZE);
-				break;
+				return true;
 			}
 		}
-		return true;
+		return false;
 	}
 
 private:
@@ -798,13 +1005,24 @@ struct KeyPropertyValidator : public HashKeyProperties<K, OP_MODE>
 	static_assert(KeyProps::AssertAll(), "Hash key failed to meet requirements");
 };
 
-template<typename K>
+template<typename K, typename _Alloc>
 struct DefaultModeSelector
 {
+	typedef typename std::bool_constant<
+		std::is_same<
+		typename _Alloc::BUCKET_SIZE::type,
+		std::integral_constant<size_t, 0>::type
+		>::value
+	> ZERO_SIZE_BUCKET; // Bucket size is not fixed -> Items are allocated from heap as needed
+
 	constexpr static const MapMode MODE = std::conditional<
+		ZERO_SIZE_BUCKET::value,
+		MODE_INSERT_READ_HEAP_BUCKET,
+		std::conditional<
 		AtomicsRequired<K, false>::STD_ATOMIC_AVAILABLE, // Check if requirements for std::atomic is met by K
 		MODE_INSERT_TAKE, // If requirements are met
 		MODE_INSERT_READ // If requirements are not met
+		>::type
 	>::type // Extract type selected by std::conditional (i.e. MODE_INSERT_TAKE or MODE_INSERT_TAKE>
 		::value; // Extract actual type from selected mode
 };

@@ -21,6 +21,11 @@ struct TT
 	uint16_t a;
 	uint8_t b;
 	uint8_t c;
+
+	std::string toString() const
+	{
+		return "TT{" + std::to_string(a) + ", " + std::to_string(b) + ", " + std::to_string(c) + "}";
+	}
 };
 
 template<typename K, typename V>
@@ -279,14 +284,64 @@ void TestKey()
 	}
 }
 
-template<typename K, MapMode OP_MODE = DefaultModeSelector<K>::MODE>
-struct _TestHash
+template<typename K, typename V, typename _Alloc = HeapAllocator<>, MapMode OP_MODE = DefaultModeSelector<K, _Alloc>::MODE>
+//MapMode OP_MODE = MapMode::PARALLEL_INSERT_TAKE>
+class MAP :
+	public _Alloc,
+	public std::conditional<
+	IS_INSERT_READ_FROM_HEAP(OP_MODE), // Check the operation mode of the map
+	BaseAllocateItemsFromHeap<K, V, _Alloc>, // Inherit if requirements are met
+	HashBaseNormal<K, V, _Alloc, IS_INSERT_TAKE(OP_MODE)>  // Inherit if requirements are not met
+	>::type
 {
-	constexpr static const auto _MODE = OP_MODE;
+public:
+	typedef typename std::conditional<
+		IS_INSERT_READ_FROM_HEAP(OP_MODE), // Check the operation mode of the map
+		BaseAllocateItemsFromHeap<K, V, _Alloc>, // Inherit if requirements are met
+		HashBaseNormal<K, V, _Alloc, IS_INSERT_TAKE(OP_MODE)>  // Inherit if requirements are not met
+	>::type Base;
+
+	MAP() : _Alloc(0), Base(3), m_hash(1){}
+
+	constexpr static const KeyPropertyValidator<K, OP_MODE> VALIDATOR{};
+	typedef typename Base::Bucket Bucket;
+	Container<Bucket, _Alloc::ALLOCATOR, _Alloc::KEY_COUNT> m_hash;
 };
 
 int main()
 {
+	someTests();
+	{
+		KeyValueLinkedList<std::string, int> test;
+		KeyValueLinkedList<std::string, int> test1;
+		test.pNext = &test1;
+		test.k.hash = 1;
+		test.k.key = "test";
+		test.v = 1;
+	}
+	{
+		MAP<std::string, int> _A;
+		MAP<std::string, int, HeapAllocator<0>, MapMode::PARALLEL_INSERT_READ_GROW_FROM_HEAP> _B;
+		constexpr auto is_same = IS_INSERT_READ_FROM_HEAP(MODE_INSERT_TAKE::value);
+		constexpr auto is_same2 = IS_INSERT_READ_FROM_HEAP(MODE_INSERT_READ::value);
+		constexpr auto is_same3 = IS_INSERT_READ_FROM_HEAP(MODE_INSERT_READ_HEAP_BUCKET::value);
+		TEST<int, HeapAllocator<0>> a;
+		a.MODE;
+		constexpr auto test = TEST<std::string, HeapAllocator<>>::ZERO_SIZE_BUCKET::value;
+		constexpr auto test_ = TEST<std::string, HeapAllocator<>>::MODE;
+		constexpr auto test2 = TEST<std::string, HeapAllocator<0>>::ZERO_SIZE_BUCKET::value;
+		constexpr auto test2_ = TEST<std::string, HeapAllocator<0>>::MODE;
+
+		constexpr auto test3 = TEST<std::string, StaticAllocator<13>>::ZERO_SIZE_BUCKET::value;
+		constexpr auto test3_ = TEST<std::string, StaticAllocator<13>>::MODE;
+		constexpr auto test4 = TEST<std::string, StaticAllocator<13, 0>>::ZERO_SIZE_BUCKET::value;
+		constexpr auto test4_ = TEST<std::string, StaticAllocator<13, 0>>::MODE;
+
+		constexpr auto test5 = TEST<std::string, ExternalAllocator<>>::ZERO_SIZE_BUCKET::value;
+		constexpr auto test5_ = TEST<std::string, ExternalAllocator<>>::MODE;
+		constexpr auto test6 = TEST<std::string, ExternalAllocator<0>>::ZERO_SIZE_BUCKET::value;
+		constexpr auto test6_ = TEST<std::string, ExternalAllocator<0>>::MODE;
+	}
 	/*auto iters = 1000;
 	for (auto i = 0; i < iters; ++i)
 	{
@@ -346,6 +401,7 @@ int main()
 
 	TestKey<std::string, MapMode::PARALLEL_INSERT_TAKE, false>(); // Fails verification
 	TestKey<std::string, MapMode::PARALLEL_INSERT_READ, true>();
+	TestKey<std::string, MapMode::PARALLEL_INSERT_READ_GROW_FROM_HEAP, true>();
 
 	TestKey<Big, MapMode::PARALLEL_INSERT_TAKE, false>(); // Fails verification
 	TestKey<Big, MapMode::PARALLEL_INSERT_READ, true>();
@@ -353,13 +409,11 @@ int main()
 	TestKey<int[2], MapMode::PARALLEL_INSERT_TAKE, false>(); // Fails verification
 	TestKey<int[2], MapMode::PARALLEL_INSERT_READ, false>(); // Fails verification
 
-	TestKey<std::bool_constant<false>, MapMode::PARALLEL_INSERT_TAKE, true>();
-	TestKey<std::bool_constant<false>, MapMode::PARALLEL_INSERT_READ, true>();
+	//TestKey<std::bool_constant<false>, MapMode::PARALLEL_INSERT_TAKE, true>();
+	//TestKey<std::bool_constant<false>, MapMode::PARALLEL_INSERT_READ, true>();
 
 	{
-		_TestHash<std::string> _Test;
-		_Test._MODE;
-		Hash<std::bool_constant<false>, int, HeapAllocator<>, MapMode::PARALLEL_INSERT_READ> __test(1);
+		//Hash<std::bool_constant<false>, int, HeapAllocator<0>, MapMode::PARALLEL_INSERT_READ> __test(1);
 		MultiHash_H<int[2], int> _test_(1);
 		//Hash<Big, int, HeapAllocator<>, MapMode::PARALLEL_INSERT_TAKE_ALLOW_LOCKING> _test(1);
 		int a[2]{};
@@ -426,7 +480,11 @@ bool operator==(const TT& o, const TT& t)
 template <>
 size_t hash(const TT& k, const size_t seed)
 {
-	union Conv
+	const TT* k_ = &k;
+	const uint64_t* val = (uint64_t*)k_;
+	//std::cout << " hashing " << k.toString() << " hash: " << hash(*val, seed) << " seed:" << seed << std::endl;
+	hash(*val, seed);
+	/*union Conv
 	{
 		Conv(const TT& t) :
 			_1(t.b), _2(t.c), _3(t.a) {}
@@ -439,9 +497,10 @@ size_t hash(const TT& k, const size_t seed)
 			uint16_t _3;
 		};
 	};
-	return hash(Conv(k).v, 0);
+	std::cout << " hashing " << k.toString() << " hash: "<< hash(Conv(k).v, seed) << " seed:" << seed << std::endl;
+	return hash(Conv(k).v, seed);
 	return hash(size_t(size_t(k.a << 16) ^ (size_t(k.b) << 24) ^ (size_t(k.c) << 8)), 0);
-	return hash(size_t((k.b << (k.c^k.b)) ^ k.a), seed);
+	return hash(size_t((k.b << (k.c^k.b)) ^ k.a), seed);*/
 }
 
 template <>
@@ -528,9 +587,6 @@ void TestHeap()
 	Chrono(test);
 }
 
-typedef BucketT<int, int, 32> Test;
-static Test __t[ComputeHashKeyCount(4000000)];
-
 void someTests()
 {
 	Hash<int, int> a(Hash<int, int>(1));
@@ -554,8 +610,8 @@ void someTests()
 
 		typedef typename std::conditional<
 			std::is_same<MODE, MODE_INSERT_TAKE>::value, // Check the operation mode of the map
-			KeyValueT<TT, int>, // If requirements are met
-			LinkedKeyValueT<TT, int>  // If requirements are not met
+			KeyValueInsertTake<TT, int>, // If requirements are met
+			KeyValueLinkedList<TT, int>  // If requirements are not met
 		>::type // Extract type selected by std::conditional (i.e. MODE_INSERT_TAKE or MODE_INSERT_TAKE>
 			KeyValueTest; // Extract actual type from selected mode
 
