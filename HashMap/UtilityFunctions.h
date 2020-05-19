@@ -12,12 +12,12 @@ static size_t GenerateSeed() noexcept
 	// Use Mersenne twister engine to generate pseudo-random numbers.
 	if constexpr (sizeof_size_t == 4U)
 	{
-		std::mt19937 engine{ rd() };
+		std::mt19937 engine{rd()};
 		return engine();
 	}
 	else if constexpr (sizeof_size_t == 8U)
 	{
-		std::mt19937_64 engine{ rd() };
+		std::mt19937_64 engine{rd()};
 		return engine();
 	}
 }

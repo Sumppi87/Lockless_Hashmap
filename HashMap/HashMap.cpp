@@ -12,8 +12,7 @@
 #include <mutex>
 #include <future>
 
-
-template<typename Hash>
+template <typename Hash>
 void TestHash(Hash& a);
 void someTests();
 
@@ -29,7 +28,7 @@ struct TT
 	}
 };
 
-template<typename K, typename V>
+template <typename K, typename V>
 struct TT_WriteItem
 {
 	K key;
@@ -39,7 +38,7 @@ struct TT_WriteItem
 #define TEST_HASHMAP
 #define RUN_IN_THREADS
 
-template<size_t SIZE>
+template <size_t SIZE>
 struct Rand
 {
 	void Fill(std::mt19937& engine)
@@ -58,15 +57,14 @@ const size_t TEST_ARRAY_SIZE = 85000;
 constexpr const size_t ITEMS = OUTER_ARR_SIZE * TEST_ARRAY_SIZE;
 
 TT_WriteItem<int, Rand<16>> TEST_ARRAY[OUTER_ARR_SIZE][TEST_ARRAY_SIZE];
-std::map<size_t/*Hash*/, size_t/*number of conflicts*/> HASHES;
-std::map<size_t/*hash index*/, size_t/*hash index*/> HASHES_INDEX;
+std::map<size_t /*Hash*/, size_t /*number of conflicts*/> HASHES;
+std::map<size_t /*hash index*/, size_t /*hash index*/> HASHES_INDEX;
 
 constexpr const size_t HASH_SIZE = ComputeHashKeyCount(ITEMS);
 
-static const bool INIT_ARRAY = []()
-{
+static const bool INIT_ARRAY = []() {
 	std::random_device rd{};
-	std::mt19937 engine{ rd() };
+	std::mt19937 engine{rd()};
 	const size_t seed = engine();
 	size_t maxHashCollision = 1;
 	size_t maxKeyCollision = 1;
@@ -78,37 +76,36 @@ static const bool INIT_ARRAY = []()
 			const int key = ((size_t(thread) << 24) | item) ^ thread;
 			TEST_ARRAY[thread][item].key = key;
 			TEST_ARRAY[thread][item].v.Fill(engine);
-			//TEST_ARRAY[thread][item].v = (int)engine();
+			// TEST_ARRAY[thread][item].v = (int)engine();
 			/*const size_t h = hash(key, seed);
 			if (HASHES.find(h) == HASHES.end())
-				HASHES.insert({ h, 1 });
+			    HASHES.insert({ h, 1 });
 			else
 			{
-				size_t& ref = HASHES.at(h);
-				ref++;
-				maxHashCollision = std::max(ref, maxHashCollision);
+			    size_t& ref = HASHES.at(h);
+			    ref++;
+			    maxHashCollision = std::max(ref, maxHashCollision);
 			}
 
 			const size_t index = h & (HASH_SIZE - 1);
 
 			if (HASHES_INDEX.find(index) == HASHES_INDEX.end())
-				HASHES_INDEX.insert({ index, 1 });
+			    HASHES_INDEX.insert({ index, 1 });
 			else
 			{
-				size_t& ref = HASHES_INDEX.at(index);
-				ref++;
-				maxKeyCollision = std::max(ref, maxKeyCollision);
+			    size_t& ref = HASHES_INDEX.at(index);
+			    ref++;
+			    maxKeyCollision = std::max(ref, maxKeyCollision);
 			}*/
 		}
 	}
-
 
 	return true;
 }();
 
 #ifdef TEST_HASHMAP
-//Hash<int, Rand<16>, HeapAllocator<20>> test2(ITEMS);
-//static Hash<int, Rand<16>, StaticAllocator<ITEMS, 20>> test2;
+// Hash<int, Rand<16>, HeapAllocator<20>> test2(ITEMS);
+// static Hash<int, Rand<16>, StaticAllocator<ITEMS, 20>> test2;
 #define TESTED "Lockless hashmap"
 #else
 #define TESTED "std::unordered_multimap"
@@ -133,10 +130,10 @@ static auto ProcessData(const unsigned int from, const unsigned int to, std::uno
 #else
 #if defined(RUN_IN_THREADS)
 			testlock.lock();
-			map.insert({ TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v });
+			map.insert({TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v});
 			testlock.unlock();
 #else
-			test.insert({ TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v });
+			test.insert({TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v});
 #endif
 #endif
 		}
@@ -147,7 +144,7 @@ static auto ProcessData(const unsigned int from, const unsigned int to, std::uno
 	return duration;
 }
 
-template<typename Map>
+template <typename Map>
 static void ProcessDatas(Map& map)
 {
 	auto start = std::chrono::steady_clock::now();
@@ -155,7 +152,11 @@ static void ProcessDatas(Map& map)
 #ifdef RUN_IN_THREADS
 	std::vector<std::future<std::chrono::milliseconds>> vec;
 	for (auto i = 0; i < THREADS; ++i)
-		vec.push_back(std::async(std::launch::async, ProcessData, i * ITEMS_PER_THREAD, i * ITEMS_PER_THREAD + ITEMS_PER_THREAD, std::ref(map)));
+		vec.push_back(std::async(std::launch::async,
+		                         ProcessData,
+		                         i * ITEMS_PER_THREAD,
+		                         i * ITEMS_PER_THREAD + ITEMS_PER_THREAD,
+		                         std::ref(map)));
 	for (auto& v : vec)
 		v.wait();
 
@@ -189,8 +190,7 @@ static bool ValidateData(const unsigned int from, const unsigned int to, std::un
 		for (size_t item = 0; item < TEST_ARRAY_SIZE; ++item)
 		{
 			int vals = 0;
-			auto receiver = [pRes, &vals](const Rand<16>& val)
-			{
+			auto receiver = [pRes, &vals](const Rand<16>& val) {
 				Rand<16>* p = pRes + vals;
 				memcpy(p, &val.data, sizeof(Rand<16>));
 				++vals;
@@ -205,7 +205,7 @@ static bool ValidateData(const unsigned int from, const unsigned int to, std::un
 			res[0] = map.find(tt.key)->second;
 #endif
 			bool ok = (vals == 1) && (memcmp(res[0].data, tt.v.data, sizeof(tt.v.data)) == 0);
-			//bool ok = (vals == 1) && (res[0].data == tt.v.data);
+			// bool ok = (vals == 1) && (res[0].data == tt.v.data);
 			OK &= ok;
 			assert(ok);
 		}
@@ -225,7 +225,7 @@ static bool ValidateData(const unsigned int from, const unsigned int to, std::un
 	return OK;
 }
 
-template<typename Map>
+template <typename Map>
 static bool ValidateDatas(Map& map)
 {
 	bool ret = true;
@@ -233,40 +233,39 @@ static bool ValidateDatas(Map& map)
 #if defined(RUN_IN_THREADS) //&& defined(TEST_HASHMAP)
 	std::vector<std::future<bool>> vec;
 	for (auto i = 0; i < THREADS; ++i)
-//#ifdef TEST_HASHMAP
-		vec.push_back(std::async(std::launch::async, ValidateData, i * ITEMS_PER_THREAD, i * ITEMS_PER_THREAD + ITEMS_PER_THREAD, std::ref(map)));
-//#else
-	//	vec.push_back(std::async(std::launch::async, ValidateData, i * ITEMS_PER_THREAD, i * ITEMS_PER_THREAD + ITEMS_PER_THREAD, std::ref(map)));
-//#endif
+		//#ifdef TEST_HASHMAP
+		vec.push_back(std::async(std::launch::async,
+		                         ValidateData,
+		                         i * ITEMS_PER_THREAD,
+		                         i * ITEMS_PER_THREAD + ITEMS_PER_THREAD,
+		                         std::ref(map)));
+	//#else
+	//	vec.push_back(std::async(std::launch::async, ValidateData, i * ITEMS_PER_THREAD, i * ITEMS_PER_THREAD +
+	//ITEMS_PER_THREAD, std::ref(map)));
+	//#endif
 	for (auto& v : vec)
 		v.wait();
 
 	for (size_t i = 0; i < vec.size(); ++i)
 	{
 		bool res = vec[i].get();
-		//std::cout << i << " - Validation Result: " << (res ? "SUCCEEDED" : "FAILED") << std::endl;
+		// std::cout << i << " - Validation Result: " << (res ? "SUCCEEDED" : "FAILED") << std::endl;
 		ret &= res;
 	}
 #else
-	//for (auto i = 0; i < OUTER_ARR_SIZE; ++i)
+	// for (auto i = 0; i < OUTER_ARR_SIZE; ++i)
 	ret &= ValidateData(0, OUTER_ARR_SIZE);
 #endif
 	return ret;
 }
 
-template<
-	size_t SIZE,
-	template<typename T3, T3> class T1
->
+template <size_t SIZE, template <typename T3, T3> class T1>
 struct _Test
 {
-	//T1<T2, T2> member;
+	// T1<T2, T2> member;
 };
 
-
-template<
-	template<typename T3, T3> class T1, typename T, T val = T()
->
+template <template <typename T3, T3> class T1, typename T, T val = T()>
 struct __Test
 {
 	typedef typename std::integral_constant<T, val> A;
@@ -281,13 +280,13 @@ size_t hash(const std::integral_constant<size_t, 1>& k, const size_t seed)
 	return hash(k.value, seed);
 }
 
-template<typename K, MapMode mode, bool assert = false>
+template <typename K, MapMode mode, bool assert = false>
 void TestKey()
 {
 	HashKeyProperties<K, mode> a;
 	constexpr bool _a1 = a.VALID_KEY_TYPE;
-	//constexpr bool _a3 = a.STD_ATOMIC_ALWAYS_LOCK_FREE;
-	//constexpr bool _a4 = a.STD_ATOMIC_AVAILABLE;
+	// constexpr bool _a3 = a.STD_ATOMIC_ALWAYS_LOCK_FREE;
+	// constexpr bool _a4 = a.STD_ATOMIC_AVAILABLE;
 	int i = 0;
 	i = 0;
 
@@ -309,8 +308,8 @@ int main()
 			std::cout << "*************************************************" << std::endl;
 			std::cout << "************************************** iteration: " << std::to_string(i) << std::endl;
 #ifdef TEST_HASHMAP
-			//Hash<int, Rand<16>, HeapAllocator<20>> test2(ITEMS);
-			//static Hash<int, Rand<16>, StaticAllocator<ITEMS, 20>> test2;
+			// Hash<int, Rand<16>, HeapAllocator<20>> test2(ITEMS);
+			// static Hash<int, Rand<16>, StaticAllocator<ITEMS, 20>> test2;
 			Hash<int, Rand<16>, HeapAllocator<32>> map(ITEMS);
 			ProcessDatas(map);
 #else
@@ -364,7 +363,7 @@ int main()
 	int* p = nullptr;
 	int& ref = *(int*)nullptr;
 
-	TT tt_{ 1,2,3 };
+	TT tt_{1, 2, 3};
 	Hash<TT, int> TT_(100);
 	TT_.Add(tt_, 1);
 	KeyIterator iterTake(TT_);
@@ -390,7 +389,7 @@ int main()
 	}
 	struct Big
 	{
-		//std::string _c;
+		// std::string _c;
 		int a : 30;
 		int b : 2;
 		int _val : 1;
@@ -410,15 +409,15 @@ int main()
 	TestKey<int[2], MapMode::PARALLEL_INSERT_READ, false>(); // Fails verification
 
 	{
-		//Hash<std::bool_constant<false>, int, HeapAllocator<0>, MapMode::PARALLEL_INSERT_READ> __test(1);
+		// Hash<std::bool_constant<false>, int, HeapAllocator<0>, MapMode::PARALLEL_INSERT_READ> __test(1);
 		MultiHash_H<int[2], int> _test_(1);
-		//Hash<Big, int, HeapAllocator<>, MapMode::PARALLEL_INSERT_TAKE_ALLOW_LOCKING> _test(1);
+		// Hash<Big, int, HeapAllocator<>, MapMode::PARALLEL_INSERT_TAKE_ALLOW_LOCKING> _test(1);
 		int a[2]{};
 		//_test_.Add(a, 1);
 
 		//__test.Add(std::integral_constant<size_t, 1>(), 3);
-		//auto val = __test.Take(std::integral_constant<size_t, 1>());
-		//val = val;
+		// auto val = __test.Take(std::integral_constant<size_t, 1>());
+		// val = val;
 	}
 
 	__Test<std::integral_constant, int, 1> a;
@@ -427,7 +426,7 @@ int main()
 #ifndef TEST_HASHMAP
 	test.reserve(ITEMS);
 #else
-	//const bool isLockFree = test2.IsLockFree();
+	// const bool isLockFree = test2.IsLockFree();
 #endif // !TEST_HASHMAP
 
 #ifndef _DEBUG
@@ -441,17 +440,16 @@ int main()
 	std::cout << "Validation for " << TESTED << " took " << duration.count() << std::endl;*/
 #endif
 
-	{// Heap allocate, with max of 111 elements, default bucket size
+	{ // Heap allocate, with max of 111 elements, default bucket size
 		Hash<TT, int> map(111);
 		constexpr auto isAlwaysLockFree = Hash<TT, int>::IsAlwaysLockFree();
 		const bool isLockFree = map.IsLockFree();
-
 
 		TestHash(map);
 	}
 
 	Hash<TT, int> map(111);
-	map.Add({ 1,2,3 }, 1);
+	map.Add({1, 2, 3}, 1);
 
 	someTests();
 	return 0;
@@ -475,8 +473,8 @@ size_t hash(const TT& k, const size_t seed)
 template <>
 size_t hash(const std::string& s, const size_t seed)
 {
-#define FNV_PRIME_32         16777619
-#define FNV_OFFSET_BASIS_32  2166136261
+#define FNV_PRIME_32 16777619
+#define FNV_OFFSET_BASIS_32 2166136261
 
 	uint32_t fnv = FNV_OFFSET_BASIS_32;
 	for (size_t i = 0; i < s.size(); ++i)
@@ -489,13 +487,13 @@ size_t hash(const std::string& s, const size_t seed)
 
 static MultiHash_S<TT, std::string, 1000> V;
 
-template<typename Hash>
+template <typename Hash>
 void TestHash(Hash& a)
 {
-	TT t1{ 1,2,3 };
-	TT t2{ 3,1,2 };
-	TT t3{ 1,3,2 };
-	TT t4{ 2,1,3 };
+	TT t1{1, 2, 3};
+	TT t2{3, 1, 2};
+	TT t3{1, 3, 2};
+	TT t4{2, 1, 3};
 	a.Add(t1, 1);
 	a.Add(t2, 2);
 	a.Add(t3, 3);
@@ -512,8 +510,7 @@ void TestHash(Hash& a)
 	}
 
 	int t3_ = a.Take(t3);
-	auto f = [](const int& obj)
-	{
+	auto f = [](const int& obj) {
 		std::cout << "Hello, " << obj << std::endl;
 		return true;
 	};
@@ -521,7 +518,7 @@ void TestHash(Hash& a)
 	t3_ = t3_;
 }
 
-template<typename Hash>
+template <typename Hash>
 int Chrono(Hash& test)
 {
 	{
@@ -560,14 +557,14 @@ void TestHeap()
 void someTests()
 {
 	Hash<int, int> a(Hash<int, int>(1));
-	{// Heap allocate, with max of 111 elements, default bucket size
+	{ // Heap allocate, with max of 111 elements, default bucket size
 		Hash<TT, int> map(111);
 		constexpr auto isAlwaysLockFree = Hash<TT, int>::IsAlwaysLockFree();
 		const bool isLockFree = map.IsLockFree();
 
 		TestHash(map);
 	}
-	{//Use externally provided memory, with max of 12 elements, bucket size of 11
+	{ // Use externally provided memory, with max of 12 elements, bucket size of 11
 		constexpr auto elems = 12;
 		typedef Hash<TT, int, ExternalAllocator<11>> SHash;
 		Container<SHash::Bucket, ALLOCATION_TYPE_STATIC::value, ComputeHashKeyCount(elems)> bucket;
@@ -575,15 +572,16 @@ void someTests()
 
 		typedef typename std::integral_constant<MapMode, MapMode::PARALLEL_INSERT_TAKE> MODE;
 
-		typedef typename std::conditional<
-			std::is_same<MODE, MODE_INSERT_TAKE>::value, // Check the operation mode of the map
-			KeyValueInsertTake<TT, int>, // If requirements are met
-			KeyValueLinkedList<TT, int>  // If requirements are not met
-		>::type // Extract type selected by std::conditional (i.e. MODE_INSERT_TAKE or MODE_INSERT_TAKE>
-			KeyValueTest; // Extract actual type from selected mode
+		typedef typename std::conditional<std::is_same<MODE, MODE_INSERT_TAKE>::value, // Check the operation mode of
+		                                                                               // the map
+		                                  KeyValueInsertTake<TT, int>, // If requirements are met
+		                                  KeyValueLinkedList<TT, int> // If requirements are not met
+		                                  >::type // Extract type selected by std::conditional (i.e. MODE_INSERT_TAKE or
+		                                          // MODE_INSERT_TAKE>
+		                                              KeyValueTest; // Extract actual type from selected mode
 
 		KeyValueTest keys_[elems]{};
-		constexpr auto same = std::is_same< SHash::KeyValue, KeyValueTest>::value;
+		constexpr auto same = std::is_same<SHash::KeyValue, KeyValueTest>::value;
 		std::atomic<SHash::KeyValue*> keyRecycle[elems];
 		{
 			SHash map;
@@ -594,7 +592,6 @@ void someTests()
 			SHash map;
 			map.Init(size_t(elems), &bucket[0], &keys[0], &keyRecycle[0]);
 			TestHash(map);
-
 		}
 	}
 	{ // Allocate statically, 111 max elements, default bucket size
@@ -623,7 +620,7 @@ void someTests()
 	{
 		Hash<int, int> test(912);
 		constexpr auto size = sizeof(test);
-		//constexpr auto heap = Hash<int, int>::NeededHeap(912) / 1024.0;
+		// constexpr auto heap = Hash<int, int>::NeededHeap(912) / 1024.0;
 		Chrono(test);
 	}
 	{
@@ -636,8 +633,8 @@ void someTests()
 		test.Add(221, 1);
 		auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start);
 		std::cout << duration.count() << std::endl;
-		//return test.Count(181) + test.Count(191) + test.Count(201) + test.Count(211) + test.Count(221);
-		//return 0;
+		// return test.Count(181) + test.Count(191) + test.Count(201) + test.Count(211) + test.Count(221);
+		// return 0;
 	}
 	{
 		MultiHash_S<const char*, int, 912> i;
@@ -646,7 +643,6 @@ void someTests()
 		int val = i.Get("Message from Hash");
 		int val2 = i.Get("Message from Hash2");
 		val = val;
-
 	}
 	{
 		MultiHash_S<std::string, int, 9172> i;
@@ -655,15 +651,14 @@ void someTests()
 		int val = i.Get("Message from Hash");
 		int val2 = i.Get("Message from Hash2");
 		val = val;
-
 	}
 	{
-		V.Add({ 1, 2, 3 }, "Message from Hash");
-		V.Add({ 3, 1, 2 }, "Message from Hash_2");
-		V.Add({ 3, 2, 1 }, "Message from Hash_3");
-		std::string test = V.Get({ 1, 2, 3 });
-		std::string test2 = V.Get({ 3, 1, 2 });
-		std::string test3 = V.Get({ 3, 2, 1 });
+		V.Add({1, 2, 3}, "Message from Hash");
+		V.Add({3, 1, 2}, "Message from Hash_2");
+		V.Add({3, 2, 1}, "Message from Hash_3");
+		std::string test = V.Get({1, 2, 3});
+		std::string test2 = V.Get({3, 1, 2});
+		std::string test3 = V.Get({3, 2, 1});
 		auto t = test.size();
 	}
 	{
@@ -677,7 +672,7 @@ void someTests()
 		i.Add(100, 17);
 		i.Add(84548, 17);
 		i.Add(100, 20);
-		int a[5] = { 0 };
+		int a[5] = {0};
 		auto c = i.Get(100, a, 5);
 		auto cc = i.Count(100);
 		const auto t = i.Get(84548);
@@ -694,7 +689,7 @@ void someTests()
 		i.Add(100, 17);
 		i.Add(84548, 17);
 		i.Add(100, 20);
-		int a[5] = { 0 };
+		int a[5] = {0};
 		auto c = i.Get(100, a, 5);
 		auto cc = i.Count(100);
 		const auto t = i.Get(84548);
@@ -734,5 +729,6 @@ void someTests()
 //   2. Use the Team Explorer window to connect to source control
 //   3. Use the Output window to see build output and other messages
 //   4. Use the Error List window to view errors
-//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files to the project
+//   5. Go to Project > Add New Item to create new code files, or Project > Add Existing Item to add existing code files
+//   to the project
 //   6. In the future, to open this project again, go to File > Open > Project and select the .sln file

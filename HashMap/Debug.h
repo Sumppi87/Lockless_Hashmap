@@ -11,13 +11,8 @@ enum class DebugLevel
 	LEVELS = ERROR + 1
 };
 
-const char* __LEVELS[(unsigned int)DebugLevel::LEVELS]{ "TRACE: ", "DEBUG: ", "ERROR: " };
-constexpr static bool ___ENABLED[(unsigned int)DebugLevel::LEVELS]
-{
-	false,
-	false,
-	false
-};
+const char* __LEVELS[(unsigned int)DebugLevel::LEVELS]{"TRACE: ", "DEBUG: ", "ERROR: "};
+constexpr static bool ___ENABLED[(unsigned int)DebugLevel::LEVELS]{false, false, false};
 
 static std::mutex __debug_lock;
 
@@ -25,9 +20,11 @@ class Debug
 {
 public:
 	Debug(const DebugLevel level)
-		: m_level(level) {}
+	    : m_level(level)
+	{
+	}
 
-	template<typename T>
+	template <typename T>
 	inline Debug& operator<<(const T& t)
 	{
 		if (___ENABLED[(unsigned int)m_level])
@@ -39,7 +36,7 @@ public:
 	}
 
 	// this is the type of std::cout
-	typedef std::basic_ostream<char, std::char_traits<char> > CoutType;
+	typedef std::basic_ostream<char, std::char_traits<char>> CoutType;
 
 	// this is the function signature of std::endl
 	typedef CoutType& (*StandardEndLine)(CoutType&);
@@ -59,7 +56,7 @@ public:
 private:
 	const DebugLevel m_level;
 };
-static Debug __debug[(unsigned int)DebugLevel::LEVELS]{ DebugLevel::TRACE, DebugLevel::DEBUG, DebugLevel::ERROR };
+static Debug __debug[(unsigned int)DebugLevel::LEVELS]{DebugLevel::TRACE, DebugLevel::DEBUG, DebugLevel::ERROR};
 
 #define TRACE(x) __debug[(unsigned int)DebugLevel::TRACE] << x;
 #define TRACE __debug[(unsigned int)DebugLevel::TRACE]
@@ -73,9 +70,9 @@ static Debug __debug[(unsigned int)DebugLevel::LEVELS]{ DebugLevel::TRACE, Debug
 struct ConcurrencyChecker
 {
 	inline ConcurrencyChecker(std::atomic<size_t>& counter, const char* file, const int line) noexcept
-		: _counter(counter)
-		, _file(file)
-		, _line(line)
+	    : _counter(counter)
+	    , _file(file)
+	    , _line(line)
 	{
 		if (++_counter != 1)
 		{

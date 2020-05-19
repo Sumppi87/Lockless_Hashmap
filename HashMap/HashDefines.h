@@ -1,9 +1,15 @@
 #pragma once
 #include <type_traits>
 
-#define HEAP_ONLY(ALLOCATION_TYPE) template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>
-#define STATIC_ONLY(ALLOCATION_TYPE) template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_STATIC>::value>::type* = nullptr>
-#define EXT_ONLY(ALLOCATION_TYPE) template<typename AT = ALLOCATION_TYPE, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type* = nullptr>
+#define HEAP_ONLY(ALLOCATION_TYPE) \
+	template <typename AT = ALLOCATION_TYPE, \
+	          typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>
+#define STATIC_ONLY(ALLOCATION_TYPE) \
+	template <typename AT = ALLOCATION_TYPE, \
+	          typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_STATIC>::value>::type* = nullptr>
+#define EXT_ONLY(ALLOCATION_TYPE) \
+	template <typename AT = ALLOCATION_TYPE, \
+	          typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type* = nullptr>
 
 // Number of slots in a single bucket
 const size_t MIN_COLLISION_SIZE = 16;
