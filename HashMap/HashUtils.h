@@ -308,6 +308,8 @@ struct BucketLinkedList
 
 		inline bool Next() noexcept
 		{
+			TRACE << typeid(Iterator).name() << " Next()" << std::endl;
+
 			KeyValue* keyValue = (_current == nullptr) ? (_current = _bucket->m_pFirst) : (_current->pNext.load());
 			if (KeyValue* next = GetKeyValue(keyValue, _h, _k))
 			{
@@ -320,11 +322,13 @@ struct BucketLinkedList
 
 		inline V& Value() noexcept
 		{
+			TRACE << typeid(Iterator).name() << " Value()" << std::endl;
 			return _current->v;
 		}
 
 		inline const V& Value() const noexcept
 		{
+			TRACE << typeid(Iterator).name() << " Value() const" << std::endl;
 			return _current->v;
 		}
 
@@ -455,17 +459,20 @@ public:
 
 		inline bool Next() noexcept
 		{
+			TRACE << typeid(Iterator).name() << " Next()" << std::endl;
 			_current = nullptr;
 			return _bucket->ReadValueFromIndex(_currentIndex, _hash, _k, &_current);
 		}
 
 		inline V& Value() noexcept
 		{
+			TRACE << typeid(Iterator).name() << " Value()" << std::endl;
 			return _current->v;
 		}
 
 		inline const V& Value() const noexcept
 		{
+			TRACE << typeid(Iterator).name() << " Value() const" << std::endl;
 			return _current->v;
 		}
 
@@ -575,6 +582,7 @@ public:
 					//
 					// FIXME: Add return an enumerated return value
 					//
+					ERROR << "LOGIC ERROR!" << std::endl;
 					return false;
 				}
 				*ppKeyValue = pCandidate;
@@ -652,6 +660,7 @@ public:
 
 		inline bool Next() noexcept
 		{
+			TRACE << typeid(Iterator).name() << " Next()" << std::endl;
 			if (_current)
 				_release(_current);
 			_current = nullptr;
@@ -661,11 +670,13 @@ public:
 
 		inline V& Value() noexcept
 		{
+			TRACE << typeid(Iterator).name() << " Value()" << std::endl;
 			return _current->v;
 		}
 
 		inline const V& Value() const noexcept
 		{
+			TRACE << typeid(Iterator).name() << " Value() const" << std::endl;
 			return _current->v;
 		}
 
@@ -684,8 +695,10 @@ private:
 	// Special implementation for Iterator
 	inline bool TakeValue(size_t& startIndex, const K& k, const size_t hash, KeyValue** ppKeyValue) noexcept
 	{
+		TRACE << typeid(BucketInsertTake<K, V, COLLISION_SIZE>).name() << " TakeValue() from " << startIndex << std::endl;
 		if (m_usageCounter == 0)
 		{
+			DEBUG << typeid(BucketInsertTake<K, V, COLLISION_SIZE>).name() << " TakeValue() Bucket is empty" << std::endl;
 			return false;
 		}
 
@@ -708,6 +721,8 @@ private:
 			}
 			else if (KeyHashPair kp{ hash, k }; pCandidate->k.compare_exchange_strong(kp, KeyHashPair()))
 			{
+				TRACE << typeid(BucketInsertTake<K, V, COLLISION_SIZE>).name() << " TakeValue() item found on index " << actualIdx << std::endl;
+
 				if (!m_bucket[actualIdx].compare_exchange_strong(pCandidate, nullptr))
 				{
 					// This shouldn't be possible
@@ -715,6 +730,7 @@ private:
 					//
 					// FIXME: Add return an enumerated return value
 					//
+					ERROR << typeid(BucketInsertTake<K, V, COLLISION_SIZE>).name() << " TakeValue() ERROR: Failed to take ownership of " << actualIdx << std::endl;
 					return false;
 				}
 
