@@ -48,7 +48,7 @@
 	                   std::is_same<std::integral_constant<MapMode, OP_MODE>, MODE_INSERT_TAKE>::value>>::type
 
 // Number of slots in a single bucket
-const size_t MIN_COLLISION_SIZE = 16;
+const size_t DEFAULT_COLLISION_SIZE = 16;
 
 enum class AllocatorType
 {

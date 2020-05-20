@@ -6,11 +6,26 @@
 #include "Internal/UtilityFunctions.h"
 #include "Internal/HashBase.h"
 
+#include "HashIterator.h"
+
 static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 
-// Iterator for specific keys
-template <typename _Hash>
-class KeyIterator;
+template <size_t MAX_ELEMENTS, size_t BUCKET_SIZE = DEFAULT_COLLISION_SIZE>
+struct StaticAllocator : public Allocator<AllocatorType::STATIC>,
+                         public StaticSizes<BUCKET_SIZE, MAX_ELEMENTS, ComputeHashKeyCount(MAX_ELEMENTS)>
+{
+	static_assert(MAX_ELEMENTS > 0, "Element count cannot be zero");
+};
+
+template <size_t BUCKET_SIZE = DEFAULT_COLLISION_SIZE>
+struct HeapAllocator : public Allocator<AllocatorType::HEAP>, public StaticSizes<BUCKET_SIZE>
+{
+};
+
+template <size_t BUCKET_SIZE = DEFAULT_COLLISION_SIZE>
+struct ExternalAllocator : public Allocator<AllocatorType::EXTERNAL>, public StaticSizes<BUCKET_SIZE>
+{
+};
 
 template <typename K,
           typename V,
@@ -21,7 +36,7 @@ class Hash : public RESOLVE_BASE_CLASS(OP_MODE, K, V, _Alloc)
 	typedef typename RESOLVE_BASE_CLASS(OP_MODE, K, V, _Alloc) Base;
 
 private:
-	typedef typename Base::ALLOCATION_TYPE AT;
+	typedef typename Base::AT AT;
 
 	typedef typename std::integral_constant<MapMode, OP_MODE> MODE;
 	typedef typename K KeyType;
@@ -155,7 +170,7 @@ EXT_ONLY_IMPL bool Hash<K, V, _Alloc, OP_MODE>::Init(const size_t max_elements,
 		Base::m_keyStorage.Init(keyStorage, max_elements);
 		Base::m_recycle.Init(keyRecycle, max_elements);
 
-		for (size_t i = 0; i < _Alloc::GetMaxElements(); ++i)
+		for (size_t i = 0; i < Base::GetMaxElements(); ++i)
 		{
 			Base::m_recycle[i] = &Base::m_keyStorage[i];
 		}
@@ -189,7 +204,7 @@ template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 MODE_NOT_TAKE_IMPL const V Hash<K, V, _Alloc, OP_MODE>::Read(const K& k) noexcept
 {
 	const size_t h = hash(k, seed);
-	const size_t index = (h & _Alloc::GetHashMask());
+	const size_t index = (h & Base::GetHashMask());
 	KeyValue* keyVal = nullptr;
 	if (m_hash[index].ReadValue(h, k, &keyVal))
 		return keyVal->v;
@@ -200,7 +215,7 @@ template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 MODE_NOT_TAKE_IMPL const bool Hash<K, V, _Alloc, OP_MODE>::Read(const K& k, V& v) noexcept
 {
 	const size_t h = hash(k, seed);
-	const size_t index = (h & _Alloc::GetHashMask());
+	const size_t index = (h & Base::GetHashMask());
 	return m_hash[index].ReadValue(h, k, v);
 }
 
@@ -210,7 +225,7 @@ MODE_TAKE_ONLY_IMPL const V Hash<K, V, _Alloc, OP_MODE>::Take(const K& k) noexce
 	V ret = V();
 
 	const size_t h = hash(k, seed);
-	const size_t index = (h & _Alloc::GetHashMask());
+	const size_t index = (h & Base::GetHashMask());
 	KeyValue* pKeyValue = nullptr;
 	if (m_hash[index].TakeValue(k, h, &pKeyValue))
 	{
@@ -243,7 +258,7 @@ MODE_TAKE_ONLY_IMPL void Hash<K, V, _Alloc, OP_MODE>::Take(const K& k,
                                                            const std::function<bool(const V&)>& receiver) noexcept
 {
 	const size_t h = hash(k, seed);
-	const size_t index = (h & _Alloc::GetHashMask());
+	const size_t index = (h & Base::GetHashMask());
 	const auto release = [=](KeyValue* pKey) { this->ReleaseNode(pKey); };
 	m_hash[index].TakeValue(k, h, receiver, release);
 }

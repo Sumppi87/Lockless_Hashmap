@@ -3,10 +3,114 @@
 #include "HashUtils.h"
 #include "HashDefines.h"
 
+template <typename _Alloc>
+struct StaticSize
+{
+	constexpr static const size_t MAX_ELEMENTS = _Alloc::MAX_ELEMENTS;
+	constexpr static const size_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS);
+
+	static_assert(MAX_ELEMENTS > 0, "Element count cannot be zero");
+
+	constexpr static size_t GetKeyCount() noexcept
+	{
+		return KEY_COUNT;
+	}
+	constexpr static size_t GetHashMask() noexcept
+	{
+		return GetKeyCount() - 1;
+	}
+	constexpr static size_t GetMaxElements() noexcept
+	{
+		return MAX_ELEMENTS;
+	}
+};
+
+struct DynamicSize
+{
+	explicit DynamicSize(const size_t count) noexcept
+	    : keyCount(ComputeHashKeyCount(count))
+	    , maxElements(count)
+	{
+	}
+
+	inline size_t GetKeyCount() const noexcept
+	{
+		return keyCount;
+	}
+	inline size_t GetHashMask() const noexcept
+	{
+		return GetKeyCount() - 1;
+	}
+	inline size_t GetMaxElements() const noexcept
+	{
+		return maxElements;
+	}
+
+	const size_t keyCount;
+	const size_t maxElements;
+};
+
+struct DynamicSizeAllowInit
+{
+	inline DynamicSizeAllowInit() noexcept
+	    : keyCount(0)
+	    , maxElements(0)
+	    , isInitialized(false)
+	{
+	}
+
+	inline explicit DynamicSizeAllowInit(const size_t max_elements) noexcept
+	    : keyCount(ComputeHashKeyCount(max_elements))
+	    , maxElements(max_elements)
+	    , isInitialized(true)
+	{
+	}
+
+	inline bool Init(const size_t max_elements) noexcept
+	{
+		bool initialized = false;
+		if (isInitialized.compare_exchange_strong(initialized, true))
+		{
+			maxElements = max_elements;
+			keyCount = ComputeHashKeyCount(GetMaxElements());
+			return true;
+		}
+		return false;
+	}
+
+	inline size_t GetKeyCount() const noexcept
+	{
+		return keyCount;
+	}
+	inline size_t GetHashMask() const noexcept
+	{
+		return keyCount - 1;
+	}
+	inline size_t GetMaxElements() const noexcept
+	{
+		return maxElements;
+	}
+
+private:
+	size_t keyCount;
+	size_t maxElements;
+	std::atomic<bool> isInitialized;
+};
+
+#define RESOLVE_INTERNAL_BASE(_Alloc) \
+	std::conditional< \
+	    std::is_same<typename _Alloc::ALLOCATION_TYPE, ALLOCATION_TYPE_STATIC>::value, \
+	    StaticSize<_Alloc>, \
+	    typename std::conditional<std::is_same<typename _Alloc::ALLOCATION_TYPE, ALLOCATION_TYPE_HEAP>::value, \
+	                              DynamicSize, \
+	                              DynamicSizeAllowInit>::type>::type
+
 template <typename K, typename V, typename _Alloc, bool MODE_INSERT_TAKE>
-struct HashBaseNormal : public _Alloc
+struct HashBaseNormal : public RESOLVE_INTERNAL_BASE(_Alloc)
 {
 protected:
+	typedef typename RESOLVE_INTERNAL_BASE(_Alloc) Base;
+
 	static_assert(_Alloc::COLLISION_SIZE > 0,
 	              "!! LOGIC ERROR !! Collision bucket cannot be zero in this implementation");
 
@@ -26,7 +130,7 @@ protected:
 	    : m_recycle()
 	    , m_usedNodes(0)
 	{
-		for (size_t i = 0; i < _Alloc::GetMaxElements(); ++i)
+		for (size_t i = 0; i < Base::GetMaxElements(); ++i)
 		{
 			m_recycle[i] = &m_keyStorage[i];
 		}
@@ -34,7 +138,7 @@ protected:
 
 	HEAP_ONLY(AT)
 	explicit HashBaseNormal(const size_t max_elements)
-	    : _Alloc(max_elements)
+	    : Base(max_elements)
 	    , m_keyStorage(max_elements)
 	    , m_recycle(max_elements)
 	    , m_usedNodes(0)
@@ -53,7 +157,7 @@ protected:
 
 	inline KeyValue* GetNextFreeKeyValue() noexcept
 	{
-		for (size_t i = m_usedNodes; i < _Alloc::GetMaxElements(); ++i)
+		for (size_t i = m_usedNodes; i < Base::GetMaxElements(); ++i)
 		{
 			KeyValue* pExpected = m_recycle[i];
 			if (pExpected == nullptr)

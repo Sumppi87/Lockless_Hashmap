@@ -7,14 +7,6 @@
 #include "UtilityFunctions.h"
 #include "Debug.h"
 
-template <size_t COLLISION_SIZE = MIN_COLLISION_SIZE>
-struct BucketSize
-{
-	constexpr static const size_t COLLISION_SIZE = COLLISION_SIZE;
-
-	typedef typename std::integral_constant<size_t, COLLISION_SIZE> BUCKET_SIZE;
-};
-
 template <AllocatorType TYPE>
 struct Allocator
 {
@@ -22,110 +14,14 @@ struct Allocator
 	typedef std::integral_constant<AllocatorType, TYPE> ALLOCATION_TYPE;
 };
 
-template <size_t MAX_ELEMENTS, size_t COLLISION_SIZE = MIN_COLLISION_SIZE>
-struct StaticAllocator : public BucketSize<COLLISION_SIZE>, public Allocator<AllocatorType::STATIC>
+template <size_t COLLISION_SIZE, size_t MAX_ELEMENTS = 0, size_t KEY_COUNT = 0>
+struct StaticSizes
 {
 	constexpr static const size_t MAX_ELEMENTS = MAX_ELEMENTS;
-	constexpr static const size_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS);
+	constexpr static const size_t KEY_COUNT = KEY_COUNT;
+	constexpr static const size_t COLLISION_SIZE = COLLISION_SIZE;
 
-	static_assert(MAX_ELEMENTS > 0, "Element count cannot be zero");
-
-	constexpr static size_t GetKeyCount() noexcept
-	{
-		return KEY_COUNT;
-	}
-	constexpr static size_t GetHashMask() noexcept
-	{
-		return GetKeyCount() - 1;
-	}
-	constexpr static size_t GetMaxElements() noexcept
-	{
-		return MAX_ELEMENTS;
-	}
-};
-
-template <size_t COLLISION_SIZE = MIN_COLLISION_SIZE>
-struct HeapAllocator : public BucketSize<COLLISION_SIZE>, public Allocator<AllocatorType::HEAP>
-{
-	explicit HeapAllocator(const size_t count) noexcept
-	    : keyCount(ComputeHashKeyCount(count))
-	    , maxElements(count)
-	{
-	}
-
-	inline size_t GetKeyCount() const noexcept
-	{
-		return keyCount;
-	}
-	inline size_t GetHashMask() const noexcept
-	{
-		return GetKeyCount() - 1;
-	}
-	inline size_t GetMaxElements() const noexcept
-	{
-		return maxElements;
-	}
-
-	const size_t keyCount;
-	const size_t maxElements;
-
-	// FIXME: Workaround to get compilation working in different allocation types
-	constexpr static const size_t MAX_ELEMENTS = 0;
-	constexpr static const size_t KEY_COUNT = 0;
-};
-
-template <size_t COLLISION_SIZE = MIN_COLLISION_SIZE>
-struct ExternalAllocator : public BucketSize<COLLISION_SIZE>, public Allocator<AllocatorType::EXTERNAL>
-{
-	inline ExternalAllocator() noexcept
-	    : keyCount(0)
-	    , maxElements(0)
-	    , isInitialized(false)
-	{
-	}
-
-	inline explicit ExternalAllocator(const size_t max_elements) noexcept
-	    : keyCount(ComputeHashKeyCount(max_elements))
-	    , maxElements(max_elements)
-	    , isInitialized(true)
-	{
-	}
-
-	inline bool Init(const size_t max_elements) noexcept
-	{
-		bool initialized = false;
-		if (isInitialized.compare_exchange_strong(initialized, true))
-		{
-			maxElements = max_elements;
-			keyCount = ComputeHashKeyCount(GetMaxElements());
-			return true;
-		}
-		return false;
-	}
-
-	inline size_t GetKeyCount() const noexcept
-	{
-		return keyCount;
-	}
-	inline size_t GetHashMask() const noexcept
-	{
-		return keyCount - 1;
-	}
-	inline size_t GetMaxElements() const noexcept
-	{
-		return maxElements;
-	}
-
-	std::atomic<bool> isInitialized;
-
-	// FIXME: Workaround to get compilation working in different allocation types
-	//
-	constexpr static const size_t MAX_ELEMENTS = 0;
-	constexpr static const size_t KEY_COUNT = 0;
-
-private:
-	size_t keyCount;
-	size_t maxElements;
+	typedef typename std::integral_constant<size_t, COLLISION_SIZE> BUCKET_SIZE;
 };
 
 template <typename T>
