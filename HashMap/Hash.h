@@ -20,6 +20,9 @@ static_assert(__cplusplus >= 201103L, "C++11 or later required!");
 #define MODE_TAKE_ONLY(_MODE) \
 	template <typename _M = _MODE, typename std::enable_if<std::is_same<_M, MODE_INSERT_TAKE>::value>::type* = nullptr>
 
+#define MODE_NOT_TAKE(_MODE) \
+	template <typename _M = _MODE, typename std::enable_if<!std::is_same<_M, MODE_INSERT_TAKE>::value>::type* = nullptr>
+
 #define MODE_READ_HEAP_BUCKET_ONLY(_MODE) \
 	template <typename _M = _MODE, \
 	          typename std::enable_if<std::is_same<_M, MODE_INSERT_READ_HEAP_BUCKET>::value>::type* = nullptr>
@@ -36,8 +39,7 @@ template <typename K,
           typename V,
           typename _Alloc = HeapAllocator<>,
           MapMode OP_MODE = DefaultModeSelector<K, _Alloc>::MODE>
-class Hash : public _Alloc,
-             public std::conditional<IS_INSERT_READ_FROM_HEAP(OP_MODE), // Check the operation mode of the map
+class Hash : public std::conditional<IS_INSERT_READ_FROM_HEAP(OP_MODE), // Check the operation mode of the map
                                      BaseAllocateItemsFromHeap<K, V, _Alloc>, // Inherit if requirements are met
                                      HashBaseNormal<K, V, _Alloc, IS_INSERT_TAKE(OP_MODE)> // Inherit if requirements
                                                                                            // are not met
@@ -50,7 +52,7 @@ class Hash : public _Alloc,
 	                                  >::type Base;
 
 private:
-	typedef typename _Alloc::ALLOCATION_TYPE AT;
+	typedef typename Base::ALLOCATION_TYPE AT;
 
 	typedef typename std::integral_constant<MapMode, OP_MODE> MODE;
 	typedef typename K KeyType;
@@ -62,12 +64,27 @@ public:
 	typedef typename Base::Bucket Bucket;
 
 public: // Construction and initialization
+	//! \brief
+	//! \param[in]
+	//! \return
 	STATIC_ONLY(AT) inline explicit Hash(const size_t seed = 0) noexcept;
 
+	//! \brief
+	//! \param[in]
+	//! \param[in]
+	//! \return
 	HEAP_ONLY(AT) inline Hash(const size_t max_elements, const size_t seed = 0);
 
+	//! \brief
+	//! \return
 	EXT_ONLY(AT) inline Hash() noexcept;
 
+	//! \brief
+	//! \param[in]
+	//! \param[in]
+	//! \param[in]
+	//! \param[in]
+	//! \return
 	EXT_ONLY(AT)
 	inline bool Init(const size_t max_elements,
 	                 Bucket* hash,
@@ -75,57 +92,51 @@ public: // Construction and initialization
 	                 std::atomic<KeyValue*>* keyRecycle) noexcept;
 
 public: // Access functions
+	//! \brief
+	//! \param[in]
+	//! \param[in]
+	//! \return
 	inline bool Add(const K& k, const V& v) noexcept;
 
-	MODE_READ_ONLY(MODE) inline const V Read(const K& k) noexcept;
+	//! \brief
+	//! \param[in]
+	//! \return
+	MODE_NOT_TAKE(MODE) inline const V Read(const K& k) noexcept;
 
-	MODE_READ_ONLY(MODE) inline const bool Read(const K& k, V& v) noexcept;
+	//! \brief
+	//! \param[in]
+	//! \param[in]
+	//! \return
+	MODE_NOT_TAKE(MODE) inline const bool Read(const K& k, V& v) noexcept;
 
+	//! \brief
+	//! \param[in]
+	//! \return
 	MODE_TAKE_ONLY(MODE) inline const V Take(const K& k) noexcept;
 
+	//! \brief
+	//! \param[in]
+	//! \param[in]
+	//! \return
 	MODE_TAKE_ONLY(MODE) inline bool Take(const K& k, V& v) noexcept;
 
+	//! \brief
+	//! \param[in]
+	//! \param[in]
+	//! \return
 	MODE_TAKE_ONLY(MODE) inline void Take(const K& k, const std::function<bool(const V&)>& receiver) noexcept;
 
 public: // Support functions
+	//! \brief
+	//! \return
 	constexpr static const bool IsAlwaysLockFree() noexcept;
 
+	//! \brief
+	//! \return
 	inline bool IsLockFree() const noexcept;
-
-private: // Internal utility functions
-	MODE_TAKE_ONLY(MODE) inline KeyValue* GetNextFreeKeyValue() noexcept
-	{
-		for (size_t i = m_usedNodes; i < _Alloc::GetMaxElements(); ++i)
-		{
-			KeyValue* pExpected = Base::m_recycle[i];
-			if (pExpected == nullptr)
-				continue;
-			if (Base::m_recycle[i].compare_exchange_strong(pExpected, nullptr))
-			{
-				pExpected->Reset();
-				m_usedNodes++;
-				return pExpected;
-			}
-		}
-		return nullptr;
-	}
-
-	MODE_READ_ONLY(MODE) inline KeyValue* GetNextFreeKeyValue() noexcept
-	{
-		m_usedNodes++;
-		return new (std::nothrow) KeyValue();
-	}
-
-	MODE_TAKE_ONLY(MODE) inline void ReleaseNode(KeyValue* pKeyValue) noexcept;
-	MODE_READ_ONLY(MODE) inline void ReleaseNode(KeyValue* pKeyValue) noexcept
-	{
-		m_usedNodes--;
-		delete pKeyValue;
-	}
 
 private:
 	Container<Bucket, _Alloc::ALLOCATOR, _Alloc::KEY_COUNT> m_hash;
-	std::atomic<size_t> m_usedNodes;
 
 	const size_t seed;
 
@@ -142,6 +153,12 @@ private:
 	constexpr static const KeyPropertyValidator<K, OP_MODE> VALIDATOR{};
 };
 
+/// ******************************************************************************************* ///
+///																								///
+//										Implementation											///
+///																								///
+/// ****************************************************************************************** ///
+
 #define HEAP_ONLY_IMPL \
 	template <typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type*>
 #define STATIC_ONLY_IMPL \
@@ -156,11 +173,13 @@ private:
 #define MODE_TAKE_ONLY_IMPL \
 	template <typename _M, typename std::enable_if<std::is_same<_M, MODE_INSERT_TAKE>::value>::type*>
 
+#define MODE_NOT_TAKE_IMPL \
+	template <typename _M, typename std::enable_if<!std::is_same<_M, MODE_INSERT_TAKE>::value>::type*>
+
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 STATIC_ONLY_IMPL Hash<K, V, _Alloc, OP_MODE>::Hash(const size_t seed /*= 0*/) noexcept
     : Base()
     , m_hash()
-    , m_usedNodes(0)
     , seed(seed == 0 ? GenerateSeed() : seed)
 {
 }
@@ -168,18 +187,14 @@ STATIC_ONLY_IMPL Hash<K, V, _Alloc, OP_MODE>::Hash(const size_t seed /*= 0*/) no
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 HEAP_ONLY_IMPL Hash<K, V, _Alloc, OP_MODE>::Hash(const size_t max_elements, const size_t seed /*= 0*/)
     : Base(max_elements)
-    , _Alloc(max_elements)
     , m_hash(ComputeHashKeyCount(max_elements))
-    , m_usedNodes(0)
     , seed(seed == 0 ? GenerateSeed() : seed)
 {
 }
 
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 EXT_ONLY_IMPL Hash<K, V, _Alloc, OP_MODE>::Hash() noexcept
-    : _Alloc()
-    , m_usedNodes(0)
-    , seed(GenerateSeed())
+    : seed(GenerateSeed())
 {
 }
 
@@ -189,7 +204,7 @@ EXT_ONLY_IMPL bool Hash<K, V, _Alloc, OP_MODE>::Init(const size_t max_elements,
                                                      KeyValue* keyStorage,
                                                      std::atomic<KeyValue*>* keyRecycle) noexcept
 {
-	if (_Alloc::Init(max_elements))
+	if (Base::Init(max_elements))
 	{
 		m_hash.Init(hash, ComputeHashKeyCount(max_elements));
 		Base::m_keyStorage.Init(keyStorage, max_elements);
@@ -207,18 +222,18 @@ EXT_ONLY_IMPL bool Hash<K, V, _Alloc, OP_MODE>::Init(const size_t max_elements,
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 bool Hash<K, V, _Alloc, OP_MODE>::Add(const K& k, const V& v) noexcept
 {
-	KeyValue* pKeyValue = GetNextFreeKeyValue();
+	KeyValue* pKeyValue = Base::GetNextFreeKeyValue();
 	if (pKeyValue == nullptr)
 		return false;
 
 	const size_t h = hash(k, seed);
-	const size_t index = (h & _Alloc::GetHashMask());
+	const size_t index = (h & Base::GetHashMask());
 
 	pKeyValue->v = v;
 	pKeyValue->k = KeyHashPair{h, k};
 	if (!m_hash[index].Add(pKeyValue))
 	{
-		ReleaseNode(pKeyValue);
+		Base::ReleaseNode(pKeyValue);
 		return false;
 		// throw std::bad_alloc();
 	}
@@ -226,7 +241,7 @@ bool Hash<K, V, _Alloc, OP_MODE>::Add(const K& k, const V& v) noexcept
 }
 
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
-MODE_READ_ONLY_IMPL_ const V Hash<K, V, _Alloc, OP_MODE>::Read(const K& k) noexcept
+MODE_NOT_TAKE_IMPL const V Hash<K, V, _Alloc, OP_MODE>::Read(const K& k) noexcept
 {
 	const size_t h = hash(k, seed);
 	const size_t index = (h & _Alloc::GetHashMask());
@@ -237,7 +252,7 @@ MODE_READ_ONLY_IMPL_ const V Hash<K, V, _Alloc, OP_MODE>::Read(const K& k) noexc
 }
 
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
-MODE_READ_ONLY_IMPL_ const bool Hash<K, V, _Alloc, OP_MODE>::Read(const K& k, V& v) noexcept
+MODE_NOT_TAKE_IMPL const bool Hash<K, V, _Alloc, OP_MODE>::Read(const K& k, V& v) noexcept
 {
 	const size_t h = hash(k, seed);
 	const size_t index = (h & _Alloc::GetHashMask());
@@ -257,7 +272,7 @@ MODE_TAKE_ONLY_IMPL const V Hash<K, V, _Alloc, OP_MODE>::Take(const K& k) noexce
 		// Value was found
 		ret = pKeyValue->v;
 
-		ReleaseNode(pKeyValue);
+		Base::ReleaseNode(pKeyValue);
 	}
 	return ret;
 }
@@ -272,7 +287,7 @@ MODE_TAKE_ONLY_IMPL bool Hash<K, V, _Alloc, OP_MODE>::Take(const K& k, V& v) noe
 	{
 		// Value was found
 		v = pKeyValue->v;
-		ReleaseNode(pKeyValue);
+		Base::ReleaseNode(pKeyValue);
 		return true;
 	}
 	return false;
@@ -305,21 +320,5 @@ bool Hash<K, V, _Alloc, OP_MODE>::IsLockFree() const noexcept
 	{
 		static KeyValue k;
 		return k.k.is_lock_free();
-	}
-}
-
-template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
-MODE_TAKE_ONLY_IMPL void Hash<K, V, _Alloc, OP_MODE>::ReleaseNode(KeyValue* pKeyValue) noexcept
-{
-	for (size_t i = --m_usedNodes;; --i)
-	{
-		KeyValue* pNull = nullptr;
-		if (Base::m_recycle[i].compare_exchange_strong(pNull, pKeyValue))
-		{
-			break;
-		}
-
-		if (i == 0)
-			break; // shouldn't get here
 	}
 }

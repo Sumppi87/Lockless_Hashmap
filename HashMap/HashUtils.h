@@ -227,12 +227,6 @@ struct KeyValueInsertTake
 	std::atomic<KeyHashPair> k;
 	V v; // value
 
-	inline void Reset() noexcept
-	{
-		k = KeyHashPair();
-		v = V();
-	}
-
 	typedef std::bool_constant<CHECK_FOR_ATOMIC_ACCESS> CHECK_TYPE;
 
 	template <typename TYPE = CHECK_TYPE,
