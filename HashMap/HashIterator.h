@@ -26,7 +26,7 @@ public:
 	inline const V& Value() const noexcept;
 
 private:
-	MODE_READ_ONLY(_Hash::MODE) inline void SetIter() noexcept;
+	MODE_NOT_TAKE(_Hash::MODE) inline void SetIter() noexcept;
 	MODE_TAKE_ONLY(_Hash::MODE) inline void SetIter() noexcept;
 
 private:
@@ -108,7 +108,7 @@ const typename _Hash::ValueType& KeyIterator<_Hash>::Value() const noexcept
 }
 
 template <typename _Hash>
-MODE_READ_ONLY_IMPL_ void KeyIterator<_Hash>::SetIter() noexcept
+MODE_NOT_TAKE_IMPL void KeyIterator<_Hash>::SetIter() noexcept
 {
 	TRACE << typeid(Iterator).name() << " SetIter()" << std::endl;
 	_iter = Iterator(_bucket, _h, _k);

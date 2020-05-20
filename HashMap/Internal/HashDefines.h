@@ -1,6 +1,9 @@
 #pragma once
 #include <type_traits>
 
+#define C17 __cplusplus >= 201703L
+#define C14 __cplusplus >= 201402L
+
 #define HEAP_ONLY(ALLOCATION_TYPE) \
 	template <typename AT = ALLOCATION_TYPE, \
 	          typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>
@@ -10,6 +13,39 @@
 #define EXT_ONLY(ALLOCATION_TYPE) \
 	template <typename AT = ALLOCATION_TYPE, \
 	          typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type* = nullptr>
+
+#define MODE_TAKE_ONLY(_MODE) \
+	template <typename _M = _MODE, typename std::enable_if<std::is_same<_M, MODE_INSERT_TAKE>::value>::type* = nullptr>
+
+#define MODE_NOT_TAKE(_MODE) \
+	template <typename _M = _MODE, typename std::enable_if<!std::is_same<_M, MODE_INSERT_TAKE>::value>::type* = nullptr>
+
+#define IS_INSERT_TAKE(x) std::is_same<std::integral_constant<MapMode, x>, MODE_INSERT_TAKE>::value
+#define IS_INSERT_READ_FROM_HEAP(x) \
+	std::is_same<std::integral_constant<MapMode, x>, MODE_INSERT_READ_HEAP_BUCKET>::value
+
+#define HEAP_ONLY_IMPL \
+	template <typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type*>
+#define STATIC_ONLY_IMPL \
+	template <typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_STATIC>::value>::type*>
+#define EXT_ONLY_IMPL \
+	template <typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type*>
+
+#define MODE_TAKE_ONLY_IMPL \
+	template <typename _M, typename std::enable_if<std::is_same<_M, MODE_INSERT_TAKE>::value>::type*>
+
+#define MODE_NOT_TAKE_IMPL \
+	template <typename _M, typename std::enable_if<!std::is_same<_M, MODE_INSERT_TAKE>::value>::type*>
+
+// Convenience macro for resolving Hash base-class
+#define RESOLVE_BASE_CLASS(OP_MODE, K, V, _Alloc) \
+	std::conditional< \
+	    std::is_same<std::integral_constant<MapMode, OP_MODE>, MODE_INSERT_READ_HEAP_BUCKET>::value, \
+	    BaseAllocateItemsFromHeap<K, V, _Alloc>, \
+	    HashBaseNormal<K, \
+	                   V, \
+	                   _Alloc, \
+	                   std::is_same<std::integral_constant<MapMode, OP_MODE>, MODE_INSERT_TAKE>::value>>::type
 
 // Number of slots in a single bucket
 const size_t MIN_COLLISION_SIZE = 16;

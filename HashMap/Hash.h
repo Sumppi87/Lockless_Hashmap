@@ -1,35 +1,12 @@
 #pragma once
 #include <assert.h>
 #include <functional>
-#include "HashFunctions.h"
-#include "HashUtils.h"
-#include "UtilityFunctions.h"
-#include "HashBase.h"
+#include "Internal/HashFunctions.h"
+#include "Internal/HashUtils.h"
+#include "Internal/UtilityFunctions.h"
+#include "Internal/HashBase.h"
 
 static_assert(__cplusplus >= 201103L, "C++11 or later required!");
-
-#define C17 __cplusplus >= 201703L
-#define C14 __cplusplus >= 201402L
-
-//#define MODE_READ_ONLY(_MODE) template<typename _M = _MODE, typename std::enable_if<std::is_same<_M,
-// MODE_INSERT_READ>::value>::type* = nullptr>
-#define MODE_READ_ONLY(_MODE) \
-	template <typename _M = _MODE, \
-	          typename std::enable_if<std::is_same<_M, MODE_INSERT_READ>::value \
-	                                  || std::is_same<_M, MODE_INSERT_READ_HEAP_BUCKET>::value>::type* = nullptr>
-#define MODE_TAKE_ONLY(_MODE) \
-	template <typename _M = _MODE, typename std::enable_if<std::is_same<_M, MODE_INSERT_TAKE>::value>::type* = nullptr>
-
-#define MODE_NOT_TAKE(_MODE) \
-	template <typename _M = _MODE, typename std::enable_if<!std::is_same<_M, MODE_INSERT_TAKE>::value>::type* = nullptr>
-
-#define MODE_READ_HEAP_BUCKET_ONLY(_MODE) \
-	template <typename _M = _MODE, \
-	          typename std::enable_if<std::is_same<_M, MODE_INSERT_READ_HEAP_BUCKET>::value>::type* = nullptr>
-
-#define IS_INSERT_TAKE(x) std::is_same<std::integral_constant<MapMode, x>, MODE_INSERT_TAKE>::value
-#define IS_INSERT_READ_FROM_HEAP(x) \
-	std::is_same<std::integral_constant<MapMode, x>, MODE_INSERT_READ_HEAP_BUCKET>::value
 
 // Iterator for specific keys
 template <typename _Hash>
@@ -39,17 +16,9 @@ template <typename K,
           typename V,
           typename _Alloc = HeapAllocator<>,
           MapMode OP_MODE = DefaultModeSelector<K, _Alloc>::MODE>
-class Hash : public std::conditional<IS_INSERT_READ_FROM_HEAP(OP_MODE), // Check the operation mode of the map
-                                     BaseAllocateItemsFromHeap<K, V, _Alloc>, // Inherit if requirements are met
-                                     HashBaseNormal<K, V, _Alloc, IS_INSERT_TAKE(OP_MODE)> // Inherit if requirements
-                                                                                           // are not met
-                                     >::type
+class Hash : public RESOLVE_BASE_CLASS(OP_MODE, K, V, _Alloc)
 {
-	typedef typename std::conditional<IS_INSERT_READ_FROM_HEAP(OP_MODE), // Check the operation mode of the map
-	                                  BaseAllocateItemsFromHeap<K, V, _Alloc>, // Inherit if requirements are met
-	                                  HashBaseNormal<K, V, _Alloc, IS_INSERT_TAKE(OP_MODE)> // Inherit if requirements
-	                                                                                        // are not met
-	                                  >::type Base;
+	typedef typename RESOLVE_BASE_CLASS(OP_MODE, K, V, _Alloc) Base;
 
 private:
 	typedef typename Base::ALLOCATION_TYPE AT;
@@ -140,13 +109,6 @@ private:
 
 	const size_t seed;
 
-	constexpr static const bool _K = std::is_trivially_copyable<K>::value;
-	constexpr static const bool _V = std::is_trivially_copyable<V>::value;
-
-	constexpr static const size_t _hash = sizeof(m_hash);
-	constexpr static const size_t _key = sizeof(KeyValue);
-	constexpr static const size_t _bucket = sizeof(Bucket);
-
 	friend class KeyIterator<Hash<K, V, _Alloc, OP_MODE>>;
 
 	// Validate
@@ -158,23 +120,6 @@ private:
 //										Implementation											///
 ///																								///
 /// ****************************************************************************************** ///
-
-#define HEAP_ONLY_IMPL \
-	template <typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type*>
-#define STATIC_ONLY_IMPL \
-	template <typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_STATIC>::value>::type*>
-#define EXT_ONLY_IMPL \
-	template <typename AT, typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type*>
-
-#define MODE_READ_ONLY_IMPL_ \
-	template <typename _M, \
-	          typename std::enable_if<std::is_same<_M, MODE_INSERT_READ>::value \
-	                                  || std::is_same<_M, MODE_INSERT_READ_HEAP_BUCKET>::value>::type*>
-#define MODE_TAKE_ONLY_IMPL \
-	template <typename _M, typename std::enable_if<std::is_same<_M, MODE_INSERT_TAKE>::value>::type*>
-
-#define MODE_NOT_TAKE_IMPL \
-	template <typename _M, typename std::enable_if<!std::is_same<_M, MODE_INSERT_TAKE>::value>::type*>
 
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 STATIC_ONLY_IMPL Hash<K, V, _Alloc, OP_MODE>::Hash(const size_t seed /*= 0*/) noexcept

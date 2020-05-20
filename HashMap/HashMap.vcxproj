@@ -164,15 +164,14 @@
     <ClCompile Include="HashMap.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Debug.h" />
     <ClInclude Include="Hash.h" />
-    <ClInclude Include="HashBase.h" />
-    <ClInclude Include="HashDefines.h" />
-    <ClInclude Include="HashFunctions.h" />
     <ClInclude Include="HashIterator.h" />
-    <ClInclude Include="HashUtils.h" />
-    <ClInclude Include="MultiHash.h" />
-    <ClInclude Include="UtilityFunctions.h" />
+    <ClInclude Include="Internal\Debug.h" />
+    <ClInclude Include="Internal\HashBase.h" />
+    <ClInclude Include="Internal\HashDefines.h" />
+    <ClInclude Include="Internal\HashFunctions.h" />
+    <ClInclude Include="Internal\HashUtils.h" />
+    <ClInclude Include="Internal\UtilityFunctions.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -5,7 +5,6 @@
 #include <string>
 #include "Hash.h"
 #include "HashIterator.h"
-#include "MultiHash.h"
 #include <chrono>
 #include <map>
 #include <unordered_map>
@@ -241,7 +240,7 @@ static bool ValidateDatas(Map& map)
 		                         std::ref(map)));
 	//#else
 	//	vec.push_back(std::async(std::launch::async, ValidateData, i * ITEMS_PER_THREAD, i * ITEMS_PER_THREAD +
-	//ITEMS_PER_THREAD, std::ref(map)));
+	// ITEMS_PER_THREAD, std::ref(map)));
 	//#endif
 	for (auto& v : vec)
 		v.wait();
@@ -304,7 +303,7 @@ int main()
 		auto iters = 0;
 		for (auto i = 1;; ++i)
 		{
-			break;
+			// break;
 			std::cout << "*************************************************" << std::endl;
 			std::cout << "************************************** iteration: " << std::to_string(i) << std::endl;
 #ifdef TEST_HASHMAP
@@ -408,18 +407,6 @@ int main()
 	TestKey<int[2], MapMode::PARALLEL_INSERT_TAKE, false>(); // Fails verification
 	TestKey<int[2], MapMode::PARALLEL_INSERT_READ, false>(); // Fails verification
 
-	{
-		// Hash<std::bool_constant<false>, int, HeapAllocator<0>, MapMode::PARALLEL_INSERT_READ> __test(1);
-		MultiHash_H<int[2], int> _test_(1);
-		// Hash<Big, int, HeapAllocator<>, MapMode::PARALLEL_INSERT_TAKE_ALLOW_LOCKING> _test(1);
-		int a[2]{};
-		//_test_.Add(a, 1);
-
-		//__test.Add(std::integral_constant<size_t, 1>(), 3);
-		// auto val = __test.Take(std::integral_constant<size_t, 1>());
-		// val = val;
-	}
-
 	__Test<std::integral_constant, int, 1> a;
 	a.a;
 	a.isSame;
@@ -484,8 +471,6 @@ size_t hash(const std::string& s, const size_t seed)
 	}
 	return hash(fnv, seed);
 }
-
-static MultiHash_S<TT, std::string, 1000> V;
 
 template <typename Hash>
 void TestHash(Hash& a)
@@ -578,7 +563,7 @@ void someTests()
 		                                  KeyValueLinkedList<TT, int> // If requirements are not met
 		                                  >::type // Extract type selected by std::conditional (i.e. MODE_INSERT_TAKE or
 		                                          // MODE_INSERT_TAKE>
-		                                              KeyValueTest; // Extract actual type from selected mode
+		    KeyValueTest; // Extract actual type from selected mode
 
 		KeyValueTest keys_[elems]{};
 		constexpr auto same = std::is_same<SHash::KeyValue, KeyValueTest>::value;
@@ -622,78 +607,6 @@ void someTests()
 		constexpr auto size = sizeof(test);
 		// constexpr auto heap = Hash<int, int>::NeededHeap(912) / 1024.0;
 		Chrono(test);
-	}
-	{
-		MultiHash_S<int, int, 912> test;
-		auto start = std::chrono::steady_clock::now();
-		test.Add(181, 1);
-		test.Add(191, 1);
-		test.Add(201, 1);
-		test.Add(211, 1);
-		test.Add(221, 1);
-		auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start);
-		std::cout << duration.count() << std::endl;
-		// return test.Count(181) + test.Count(191) + test.Count(201) + test.Count(211) + test.Count(221);
-		// return 0;
-	}
-	{
-		MultiHash_S<const char*, int, 912> i;
-		i.Add("Message from Hash", 7);
-		i.Add("Message from Hash2", 17);
-		int val = i.Get("Message from Hash");
-		int val2 = i.Get("Message from Hash2");
-		val = val;
-	}
-	{
-		MultiHash_S<std::string, int, 9172> i;
-		i.Add("Message from Hash", 7);
-		i.Add("Message from Hash2", 17);
-		int val = i.Get("Message from Hash");
-		int val2 = i.Get("Message from Hash2");
-		val = val;
-	}
-	{
-		V.Add({1, 2, 3}, "Message from Hash");
-		V.Add({3, 1, 2}, "Message from Hash_2");
-		V.Add({3, 2, 1}, "Message from Hash_3");
-		std::string test = V.Get({1, 2, 3});
-		std::string test2 = V.Get({3, 1, 2});
-		std::string test3 = V.Get({3, 2, 1});
-		auto t = test.size();
-	}
-	{
-		MultiHash_S<int, int, 912> i;
-		constexpr auto size = sizeof(i) / 1024;
-		i.Add(100, 12);
-		i.Add(100, 13);
-		i.Add(100, 15);
-		i.Add(100, 17);
-		i.Add(100, 17);
-		i.Add(100, 17);
-		i.Add(84548, 17);
-		i.Add(100, 20);
-		int a[5] = {0};
-		auto c = i.Get(100, a, 5);
-		auto cc = i.Count(100);
-		const auto t = i.Get(84548);
-		c = c;
-	}
-	{
-		MultiHash_H<int, int> i(917);
-		constexpr auto size = sizeof(i);
-		i.Add(100, 12);
-		i.Add(100, 13);
-		i.Add(100, 15);
-		i.Add(100, 17);
-		i.Add(100, 17);
-		i.Add(100, 17);
-		i.Add(84548, 17);
-		i.Add(100, 20);
-		int a[5] = {0};
-		auto c = i.Get(100, a, 5);
-		auto cc = i.Count(100);
-		const auto t = i.Get(84548);
-		c = c;
 	}
 	{
 		Hash<int, int, StaticAllocator<100, 8>> t;
