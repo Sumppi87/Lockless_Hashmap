@@ -126,6 +126,8 @@ private:
 	typedef typename Base::KeyHashPair KeyHashPair;
 	typedef typename K KeyType;
 	typedef typename V ValueType;
+
+	DISABLE_COPY_MOVE(Hash)
 };
 
 /// ******************************************************************************************* ///
@@ -270,7 +272,7 @@ constexpr const bool Hash<K, V, _Alloc, OP_MODE>::IsAlwaysLockFree() noexcept
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 bool Hash<K, V, _Alloc, OP_MODE>::IsLockFree() const noexcept
 {
-	if constexpr (KeyValue::IsAlwaysLockFree())
+	if constexpr (IsAlwaysLockFree())
 	{
 		return true;
 	}

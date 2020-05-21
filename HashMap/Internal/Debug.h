@@ -29,8 +29,12 @@ template <DebugLevel level>
 class Debug
 {
 public:
+	inline Debug() noexcept
+	{
+	}
+
 	template <typename... Args>
-	inline void Print(Args&&... args)
+	inline void Print(Args&&... args) noexcept
 	{
 		std::lock_guard guard(__debug_lock);
 		std::cout << __LEVELS[(unsigned int)level];
@@ -40,17 +44,19 @@ public:
 
 private:
 	template <typename Arg>
-	inline void _Print(Arg&& arg)
+	inline void _Print(Arg&& arg) noexcept
 	{
 		std::cout << std::forward<Arg&&>(arg);
 	}
 
 	template <typename Arg, typename... Args>
-	inline void _Print(Arg&& arg, Args&&... args)
+	inline void _Print(Arg&& arg, Args&&... args) noexcept
 	{
 		_Print(std::forward<Arg>(arg));
 		_Print(std::forward<Args>(args)...);
 	}
+
+	DISABLE_COPY_MOVE(Debug)
 };
 
 static Debug<DebugLevel::TRACE> __trace;
@@ -110,6 +116,8 @@ private:
 	std::atomic<size_t>& _counter;
 	const char* _file;
 	const int _line;
+
+	DISABLE_COPY_MOVE(ConcurrencyChecker)
 };
 
 #define CHECK_CONCURRENT_ACCESS(atomic_counter) ConcurrencyChecker ____checker(atomic_counter, __FILE__, __LINE__);

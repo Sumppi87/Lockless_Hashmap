@@ -85,6 +85,8 @@ struct PtrArray : public Array<T>
 		delete[] Array<T>::_array;
 		Array<T>::_array = nullptr;
 	}
+
+	DISABLE_COPY_MOVE(PtrArray)
 };
 
 template <typename T>
@@ -103,6 +105,8 @@ struct ExtArray : public Array<T>
 		Array<T>::_array = ptr;
 		Array<T>::_size = size;
 	}
+
+	DISABLE_COPY_MOVE(ExtArray)
 };
 
 template <typename K>
