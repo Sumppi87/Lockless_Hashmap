@@ -2,7 +2,7 @@
 #include "Hash.h"
 
 template <typename _Hash>
-class KeyIterator
+class HashIterator
 {
 	typedef typename _Hash::KeyType K;
 	typedef typename _Hash::ValueType V;
@@ -10,14 +10,14 @@ class KeyIterator
 	typedef typename Bucket::Iterator Iterator;
 
 public:
-	explicit KeyIterator(_Hash& hash) noexcept;
+	explicit HashIterator(_Hash& hash) noexcept;
 
-	~KeyIterator() noexcept;
+	~HashIterator() noexcept;
 
-	inline KeyIterator& SetKey(const K& k) noexcept;
+	inline HashIterator& SetKey(const K& k) noexcept;
 
 	//! \brief Resets the iterator back to initial position (i.e. Same as calling SetKey again)
-	inline KeyIterator& Reset() noexcept;
+	inline HashIterator& Reset() noexcept;
 
 	inline bool Next() noexcept;
 
@@ -44,7 +44,7 @@ private:
 };
 
 template <typename _Hash>
-KeyIterator<_Hash>::KeyIterator(_Hash& hash) noexcept
+HashIterator<_Hash>::HashIterator(_Hash& hash) noexcept
     : _hash(hash)
     , _h(0)
     , _bucket(nullptr)
@@ -53,14 +53,14 @@ KeyIterator<_Hash>::KeyIterator(_Hash& hash) noexcept
 }
 
 template <typename _Hash>
-KeyIterator<_Hash>::~KeyIterator() noexcept
+HashIterator<_Hash>::~HashIterator() noexcept
 {
 	if (_keyValue)
 		_hash.ReleaseNode(_keyValue);
 }
 
 template <typename _Hash>
-KeyIterator<_Hash>& KeyIterator<_Hash>::SetKey(const K& k) noexcept
+HashIterator<_Hash>& HashIterator<_Hash>::SetKey(const K& k) noexcept
 {
 	CHECK_CONCURRENT_ACCESS(_counter);
 
@@ -76,7 +76,7 @@ KeyIterator<_Hash>& KeyIterator<_Hash>::SetKey(const K& k) noexcept
 
 //! \brief Resets the iterator back to initial position (i.e. Same as calling SetKey again)
 template <typename _Hash>
-KeyIterator<_Hash>& KeyIterator<_Hash>::Reset() noexcept
+HashIterator<_Hash>& HashIterator<_Hash>::Reset() noexcept
 {
 	CHECK_CONCURRENT_ACCESS(_counter);
 	SetIter();
@@ -84,7 +84,7 @@ KeyIterator<_Hash>& KeyIterator<_Hash>::Reset() noexcept
 }
 
 template <typename _Hash>
-bool KeyIterator<_Hash>::Next() noexcept
+bool HashIterator<_Hash>::Next() noexcept
 {
 	CHECK_CONCURRENT_ACCESS(_counter);
 	TRACE(typeid(Iterator).name(), " Next()");
@@ -92,7 +92,7 @@ bool KeyIterator<_Hash>::Next() noexcept
 }
 
 template <typename _Hash>
-typename _Hash::ValueType& KeyIterator<_Hash>::Value() noexcept
+typename _Hash::ValueType& HashIterator<_Hash>::Value() noexcept
 {
 	CHECK_CONCURRENT_ACCESS(_counter);
 	TRACE(typeid(Iterator).name(), " Value()");
@@ -100,7 +100,7 @@ typename _Hash::ValueType& KeyIterator<_Hash>::Value() noexcept
 }
 
 template <typename _Hash>
-const typename _Hash::ValueType& KeyIterator<_Hash>::Value() const noexcept
+const typename _Hash::ValueType& HashIterator<_Hash>::Value() const noexcept
 {
 	CHECK_CONCURRENT_ACCESS(_counter);
 	TRACE(typeid(Iterator).name(), " Value() const");
@@ -108,14 +108,14 @@ const typename _Hash::ValueType& KeyIterator<_Hash>::Value() const noexcept
 }
 
 template <typename _Hash>
-MODE_NOT_TAKE_IMPL void KeyIterator<_Hash>::SetIter() noexcept
+MODE_NOT_TAKE_IMPL void HashIterator<_Hash>::SetIter() noexcept
 {
 	TRACE(typeid(Iterator).name(), " SetIter()");
 	_iter = Iterator(_bucket, _h, _k);
 }
 
 template <typename _Hash>
-MODE_TAKE_ONLY_IMPL void KeyIterator<_Hash>::SetIter() noexcept
+MODE_TAKE_ONLY_IMPL void HashIterator<_Hash>::SetIter() noexcept
 {
 	TRACE(typeid(Iterator).name(), " SetIter()");
 	_release = [=](typename _Hash::KeyValue* pKey) { _hash.ReleaseNode(pKey); };

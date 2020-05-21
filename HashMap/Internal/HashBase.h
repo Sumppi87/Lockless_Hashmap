@@ -23,6 +23,13 @@ struct StaticSize
 	{
 		return MAX_ELEMENTS;
 	}
+
+	inline StaticSize() noexcept
+	{
+	}
+
+private:
+	DISABLE_COPY_MOVE(StaticSize)
 };
 
 struct DynamicSize
@@ -48,6 +55,9 @@ struct DynamicSize
 
 	const size_t keyCount;
 	const size_t maxElements;
+
+private:
+	DISABLE_COPY_MOVE(DynamicSize)
 };
 
 struct DynamicSizeAllowInit
@@ -95,6 +105,8 @@ private:
 	size_t keyCount;
 	size_t maxElements;
 	std::atomic<bool> isInitialized;
+
+	DISABLE_COPY_MOVE(DynamicSizeAllowInit)
 };
 
 #define RESOLVE_INTERNAL_BASE(_Alloc) \
@@ -193,6 +205,9 @@ protected:
 
 	constexpr static const size_t _keys = sizeof(m_keyStorage);
 	constexpr static const size_t _recycle = sizeof(m_recycle);
+
+private:
+	DISABLE_COPY_MOVE(HashBaseNormal)
 };
 
 template <typename K, typename V, typename _Alloc>
@@ -234,5 +249,8 @@ protected:
 		delete pKeyValue;
 	}
 
+private:
 	std::atomic<size_t> m_usedNodes;
+
+	DISABLE_COPY_MOVE(BaseAllocateItemsFromHeap)
 };

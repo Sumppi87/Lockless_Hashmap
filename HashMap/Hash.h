@@ -34,16 +34,10 @@ template <typename K,
 class Hash : public RESOLVE_BASE_CLASS(OP_MODE, K, V, _Alloc)
 {
 	typedef typename RESOLVE_BASE_CLASS(OP_MODE, K, V, _Alloc) Base;
-
-private:
+	typedef typename std::integral_constant<MapMode, OP_MODE> MODE;
 	typedef typename Base::AT AT;
 
-	typedef typename std::integral_constant<MapMode, OP_MODE> MODE;
-	typedef typename K KeyType;
-	typedef typename V ValueType;
-
 public:
-	typedef typename Base::KeyHashPair KeyHashPair;
 	typedef typename Base::KeyValue KeyValue;
 	typedef typename Base::Bucket Bucket;
 
@@ -124,10 +118,14 @@ private:
 
 	const size_t seed;
 
-	friend class KeyIterator<Hash<K, V, _Alloc, OP_MODE>>;
+	friend class HashIterator<Hash<K, V, _Alloc, OP_MODE>>;
 
 	// Validate
 	constexpr static const KeyPropertyValidator<K, OP_MODE> VALIDATOR{};
+
+	typedef typename Base::KeyHashPair KeyHashPair;
+	typedef typename K KeyType;
+	typedef typename V ValueType;
 };
 
 /// ******************************************************************************************* ///

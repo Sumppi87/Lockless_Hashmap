@@ -781,13 +781,7 @@ struct Container
 	{
 	}
 
-	// FIXME:	Check usage of copy/move assignment/constructor
-	//			-> Can be enabled in some types?
-	//
-	/*Container(Container&&) = delete;
-	Container(Container&) = delete;
-	Container& operator=(Container&) = delete;
-	Container& operator=(Container&&) = delete;*/
+	DISABLE_COPY_MOVE(Container)
 };
 
 template <typename K>

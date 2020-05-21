@@ -355,7 +355,7 @@ int main()
 	}
 	Hash<std::string, int> str_(100);
 	std::string s("1");
-	KeyIterator iterRead(str_);
+	HashIterator iterRead(str_);
 	iterRead.SetKey(s);
 	iterRead.Next();
 
@@ -365,7 +365,7 @@ int main()
 	TT tt_{1, 2, 3};
 	Hash<TT, int> TT_(100);
 	TT_.Add(tt_, 1);
-	KeyIterator iterTake(TT_);
+	HashIterator iterTake(TT_);
 	iterTake.SetKey(tt_);
 	iterTake.Next();
 
@@ -486,8 +486,8 @@ void TestHash(Hash& a)
 	a.Add(t3, 4);
 	a.Add(t4, 5);
 
-	KeyIterator iter(a);
-	TRACE << typeid(KeyIterator).name() << std::endl;
+	HashIterator iter(a);
+	// TRACE << typeid(KeyIterator).name() << std::endl;
 	iter.SetKey(t3);
 	while (iter.Next())
 	{
