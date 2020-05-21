@@ -34,10 +34,36 @@ struct TT_WriteItem
 	V v;
 };
 
-#define TEST_HASHMAP
-#define RUN_IN_THREADS
+enum Components
+{
+	SUT_STD_UNORDERED_MULTIMAP,
+	SUT_HASHMAP_INSERT_TAKE,
+	SUT_HASHMAP_INSERT_READ,
+	SUT_HASHMAP_INSERT_READ_HEAP_BUCKET,
+	SUT_SIZE = SUT_HASHMAP_INSERT_READ_HEAP_BUCKET + 1
+};
 
-template <size_t SIZE>
+enum HashMemAllocator
+{
+	HEAP,
+	STATIC,
+	EXT
+};
+
+constexpr static const Components SUT = Components::SUT_HASHMAP_INSERT_TAKE;
+constexpr static const HashMemAllocator HashAllocator = HashMemAllocator::STATIC;
+constexpr static const bool validateWithIterators = 0;
+constexpr static const bool validateForExtraItems = false;
+constexpr static const uint8_t THREADS = 1;
+
+constexpr static const char* TESTED[SUT_SIZE] = {"std::unordered_multimap",
+                                                 "Hash(insert take)",
+                                                 "Hash(insert read)",
+                                                 "Hash(insert read HEAP)"};
+
+static std::mutex testlock;
+
+template <uint32_t SIZE>
 struct Rand
 {
 	void Fill(std::mt19937& engine)
@@ -49,50 +75,49 @@ struct Rand
 };
 
 const uint8_t OUTER_ARR_SIZE = 24;
-const uint8_t THREADS = 6;
 const uint8_t ITEMS_PER_THREAD = OUTER_ARR_SIZE / THREADS;
 static_assert((OUTER_ARR_SIZE % THREADS) == 0);
-const size_t TEST_ARRAY_SIZE = 85000;
-constexpr const size_t ITEMS = OUTER_ARR_SIZE * TEST_ARRAY_SIZE;
+const uint32_t TEST_ARRAY_SIZE = 85000;
+constexpr const uint32_t ITEMS = OUTER_ARR_SIZE * TEST_ARRAY_SIZE;
 
 TT_WriteItem<int, Rand<16>> TEST_ARRAY[OUTER_ARR_SIZE][TEST_ARRAY_SIZE];
-std::map<size_t /*Hash*/, size_t /*number of conflicts*/> HASHES;
-std::map<size_t /*hash index*/, size_t /*hash index*/> HASHES_INDEX;
+std::map<uint32_t /*Hash*/, uint32_t /*number of conflicts*/> HASHES;
+std::map<uint32_t /*hash index*/, uint32_t /*hash index*/> HASHES_INDEX;
 
-constexpr const size_t HASH_SIZE = ComputeHashKeyCount(ITEMS);
+constexpr const uint32_t HASH_SIZE = ComputeHashKeyCount(ITEMS);
 
 static const bool INIT_ARRAY = []() {
 	std::random_device rd{};
 	std::mt19937 engine{rd()};
-	const size_t seed = engine();
-	size_t maxHashCollision = 1;
-	size_t maxKeyCollision = 1;
+	const uint32_t seed = engine();
+	uint32_t maxHashCollision = 1;
+	uint32_t maxKeyCollision = 1;
 
 	for (uint8_t thread = 0; thread < OUTER_ARR_SIZE; ++thread)
 	{
-		for (size_t item = 0; item < TEST_ARRAY_SIZE; ++item)
+		for (uint32_t item = 0; item < TEST_ARRAY_SIZE; ++item)
 		{
-			const int key = ((size_t(thread) << 24) | item) ^ thread;
+			const int key = ((uint32_t(thread) << 24) | item) ^ thread;
 			TEST_ARRAY[thread][item].key = key;
 			TEST_ARRAY[thread][item].v.Fill(engine);
 			// TEST_ARRAY[thread][item].v = (int)engine();
-			/*const size_t h = hash(key, seed);
+			/*const uint32_t h = hash(key, seed);
 			if (HASHES.find(h) == HASHES.end())
 			    HASHES.insert({ h, 1 });
 			else
 			{
-			    size_t& ref = HASHES.at(h);
+			    uint32_t& ref = HASHES.at(h);
 			    ref++;
 			    maxHashCollision = std::max(ref, maxHashCollision);
 			}
 
-			const size_t index = h & (HASH_SIZE - 1);
+			const uint32_t index = h & (HASH_SIZE - 1);
 
 			if (HASHES_INDEX.find(index) == HASHES_INDEX.end())
 			    HASHES_INDEX.insert({ index, 1 });
 			else
 			{
-			    size_t& ref = HASHES_INDEX.at(index);
+			    uint32_t& ref = HASHES_INDEX.at(index);
 			    ref++;
 			    maxKeyCollision = std::max(ref, maxKeyCollision);
 			}*/
@@ -102,39 +127,35 @@ static const bool INIT_ARRAY = []() {
 	return true;
 }();
 
-#ifdef TEST_HASHMAP
-// Hash<int, Rand<16>, HeapAllocator<20>> test2(ITEMS);
-// static Hash<int, Rand<16>, StaticAllocator<ITEMS, 20>> test2;
-#define TESTED "Lockless hashmap"
-#else
-#define TESTED "std::unordered_multimap"
-std::mutex testlock;
-std::unordered_multimap<int, Rand<16>> test;
-#endif
-
-#ifdef TEST_HASHMAP
-static auto ProcessData(const unsigned int from, const unsigned int to, Hash<int, Rand<16>, HeapAllocator<32>>& map)
-#else
-static auto ProcessData(const unsigned int from, const unsigned int to, std::unordered_multimap<int, Rand<16>>& map)
-#endif
+template <typename Map>
+static auto ProcessData(const unsigned int from, const unsigned int to, Map& map)
 {
 	auto start = std::chrono::steady_clock::now();
 	for (auto index = from; index < to; ++index)
 	{
-		for (size_t item = 0; item < TEST_ARRAY_SIZE; ++item)
+		for (uint32_t item = 0; item < TEST_ARRAY_SIZE; ++item)
 		{
-#ifdef TEST_HASHMAP
-			if (!map.Add(TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v))
-				assert(0);
-#else
-#if defined(RUN_IN_THREADS)
-			testlock.lock();
-			map.insert({TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v});
-			testlock.unlock();
-#else
-			test.insert({TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v});
-#endif
-#endif
+			if constexpr (SUT != Components::SUT_STD_UNORDERED_MULTIMAP)
+			{
+				if (!map.Add(TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v))
+				{
+					assert(0);
+					throw "ERROR: Unable to insert data to map";
+				}
+			}
+			else if constexpr (SUT == Components::SUT_STD_UNORDERED_MULTIMAP)
+			{
+				if constexpr (THREADS > 1)
+				{
+					testlock.lock();
+					map.insert({TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v});
+					testlock.unlock();
+				}
+				else
+				{
+					map.insert({TEST_ARRAY[index][item].key, TEST_ARRAY[index][item].v});
+				}
+			}
 		}
 	}
 
@@ -148,45 +169,45 @@ static void ProcessDatas(Map& map)
 {
 	auto start = std::chrono::steady_clock::now();
 
-#ifdef RUN_IN_THREADS
-	std::vector<std::future<std::chrono::milliseconds>> vec;
-	for (auto i = 0; i < THREADS; ++i)
-		vec.push_back(std::async(std::launch::async,
-		                         ProcessData,
-		                         i * ITEMS_PER_THREAD,
-		                         i * ITEMS_PER_THREAD + ITEMS_PER_THREAD,
-		                         std::ref(map)));
-	for (auto& v : vec)
-		v.wait();
-
-	for (size_t i = 0; i < vec.size(); ++i)
+	if constexpr (THREADS > 1)
 	{
-		auto res = vec[i].get().count();
-		std::cout << i << " - Execution time: " << res << std::endl;
-	}
-#else
-	ProcessData(0, OUTER_ARR_SIZE);
-#endif
+		std::vector<std::future<std::chrono::milliseconds>> vec;
+		for (auto i = 0; i < THREADS; ++i)
+			vec.push_back(std::async(
+			    std::launch::async,
+			    [&map](const unsigned int from, const unsigned int to) { return ProcessData(from, to, map); },
+			    i * ITEMS_PER_THREAD,
+			    i * ITEMS_PER_THREAD + ITEMS_PER_THREAD));
+		for (auto& v : vec)
+			v.wait();
 
+		for (uint32_t i = 0; i < vec.size(); ++i)
+		{
+			auto res = vec[i].get().count();
+			std::cout << i << " - Execution time: " << res << std::endl;
+		}
+	}
+	else
+	{
+		ProcessData(0, OUTER_ARR_SIZE, map);
+	}
 	auto end = std::chrono::steady_clock::now() - start;
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end);
 	std::cout << "Total execution time: " << duration.count() << std::endl;
 }
 
-#ifdef TEST_HASHMAP
-static bool ValidateData(const unsigned int from, const unsigned int to, Hash<int, Rand<16>, HeapAllocator<32>>& map)
-#else
-static bool ValidateData(const unsigned int from, const unsigned int to, std::unordered_multimap<int, Rand<16>>& map)
-#endif
+template <typename Map>
+static bool ValidateData(const unsigned int from, const unsigned int to, Map& map)
 {
-	auto start = std::chrono::steady_clock::now();
-
-	bool OK = true;
 	Rand<16> res[2]{};
 	Rand<16>* pRes = &res[0];
-	for (size_t thread = from; thread < to; ++thread)
+
+	auto start = std::chrono::steady_clock::now();
+	bool OK = true;
+
+	for (uint32_t thread = from; thread < to; ++thread)
 	{
-		for (size_t item = 0; item < TEST_ARRAY_SIZE; ++item)
+		for (uint32_t item = 0; item < TEST_ARRAY_SIZE; ++item)
 		{
 			int vals = 0;
 			auto receiver = [pRes, &vals](const Rand<16>& val) {
@@ -197,29 +218,77 @@ static bool ValidateData(const unsigned int from, const unsigned int to, std::un
 			};
 
 			const auto tt = TEST_ARRAY[thread][item];
-#ifdef TEST_HASHMAP
-			map.Take(tt.key, receiver);
-#else
-			vals = map.count(tt.key);
-			res[0] = map.find(tt.key)->second;
-#endif
-			bool ok = (vals == 1) && (memcmp(res[0].data, tt.v.data, sizeof(tt.v.data)) == 0);
-			// bool ok = (vals == 1) && (res[0].data == tt.v.data);
-			OK &= ok;
-			assert(ok);
+			if constexpr ((SUT != Components::SUT_STD_UNORDERED_MULTIMAP))
+			{
+				if constexpr (validateWithIterators)
+				{
+					HashIterator iter(map);
+					iter.SetKey(tt.key);
+					bool ok = iter.Next() && (memcmp(iter.Value().data, tt.v.data, sizeof(tt.v.data)) == 0);
+					OK &= ok;
+					assert(ok);
+
+					if constexpr (validateForExtraItems)
+					{
+						const bool noExtraItems = (iter.Next() == false);
+						OK &= noExtraItems;
+						assert(noExtraItems);
+					}
+				}
+				else if constexpr (SUT == Components::SUT_HASHMAP_INSERT_TAKE)
+				{
+					if constexpr (validateForExtraItems)
+					{
+						map.Take(tt.key, receiver);
+						bool ok = (vals == 1) && (memcmp(res[0].data, tt.v.data, sizeof(tt.v.data)) == 0);
+					}
+					else
+					{
+						const auto& val = map.Take(tt.key);
+						bool ok = (memcmp(val.data, tt.v.data, sizeof(tt.v.data)) == 0);
+						OK &= ok;
+						assert(ok);
+					}
+				}
+				else if constexpr (SUT == Components::SUT_HASHMAP_INSERT_READ)
+				{
+					if constexpr (validateForExtraItems)
+					{
+						map.Read(tt.key, receiver);
+						bool ok = (vals == 1) && (memcmp(res[0].data, tt.v.data, sizeof(tt.v.data)) == 0);
+					}
+					else
+					{
+						const auto& val = map.Read(tt.key);
+						bool ok = (memcmp(val.data, tt.v.data, sizeof(tt.v.data)) == 0);
+						OK &= ok;
+						assert(ok);
+					}
+				}
+			}
+			else
+			{
+				vals = map.count(tt.key);
+				res[0] = map.find(tt.key)->second;
+				bool ok = (vals == 1) && (memcmp(res[0].data, tt.v.data, sizeof(tt.v.data)) == 0);
+				OK &= ok;
+				assert(ok);
+			}
 		}
 	}
 
-#ifdef RUN_IN_THREADS
-	auto end = std::chrono::steady_clock::now() - start;
-	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end);
-
-	static std::mutex std_cout_lock;
+	if constexpr (THREADS > 1)
 	{
-		std::lock_guard locker(std_cout_lock);
-		std::cout << int(from / ITEMS_PER_THREAD) << " - Validation execution time: " << duration.count() << std::endl;
+		auto end = std::chrono::steady_clock::now() - start;
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end);
+
+		static std::mutex std_cout_lock;
+		{
+			std::lock_guard locker(std_cout_lock);
+			std::cout << int(from / ITEMS_PER_THREAD) << " - Validation execution time: " << duration.count()
+			          << std::endl;
+		}
 	}
-#endif //  RUN_IN_THREAD
 
 	return OK;
 }
@@ -227,54 +296,43 @@ static bool ValidateData(const unsigned int from, const unsigned int to, std::un
 template <typename Map>
 static bool ValidateDatas(Map& map)
 {
+	auto start = std::chrono::steady_clock::now();
+
 	bool ret = true;
 
-#if defined(RUN_IN_THREADS) //&& defined(TEST_HASHMAP)
-	std::vector<std::future<bool>> vec;
-	for (auto i = 0; i < THREADS; ++i)
-		//#ifdef TEST_HASHMAP
-		vec.push_back(std::async(std::launch::async,
-		                         ValidateData,
-		                         i * ITEMS_PER_THREAD,
-		                         i * ITEMS_PER_THREAD + ITEMS_PER_THREAD,
-		                         std::ref(map)));
-	//#else
-	//	vec.push_back(std::async(std::launch::async, ValidateData, i * ITEMS_PER_THREAD, i * ITEMS_PER_THREAD +
-	// ITEMS_PER_THREAD, std::ref(map)));
-	//#endif
-	for (auto& v : vec)
-		v.wait();
-
-	for (size_t i = 0; i < vec.size(); ++i)
+	if constexpr (THREADS > 1)
 	{
-		bool res = vec[i].get();
-		// std::cout << i << " - Validation Result: " << (res ? "SUCCEEDED" : "FAILED") << std::endl;
-		ret &= res;
+		std::vector<std::future<bool>> vec;
+		for (auto i = 0; i < THREADS; ++i)
+			vec.push_back(std::async(
+			    std::launch::async,
+			    [&map](const unsigned int from, const unsigned int to) { return ValidateData(from, to, map); },
+			    i * ITEMS_PER_THREAD,
+			    i * ITEMS_PER_THREAD + ITEMS_PER_THREAD));
+
+		for (auto& v : vec)
+			v.wait();
+
+		for (uint32_t i = 0; i < vec.size(); ++i)
+		{
+			bool res = vec[i].get();
+			ret &= res;
+		}
 	}
-#else
-	// for (auto i = 0; i < OUTER_ARR_SIZE; ++i)
-	ret &= ValidateData(0, OUTER_ARR_SIZE);
-#endif
+	else
+	{
+		ret &= ValidateData(0, OUTER_ARR_SIZE, map);
+	}
+
+	std::cout << "Validation result " << (ret ? "OK" : "ERROR") << std::endl;
+	auto end = std::chrono::steady_clock::now() - start;
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end);
+	std::cout << "Validation for " << TESTED[SUT] << " took " << duration.count() << std::endl;
+
 	return ret;
 }
 
-template <size_t SIZE, template <typename T3, T3> class T1>
-struct _Test
-{
-	// T1<T2, T2> member;
-};
-
-template <template <typename T3, T3> class T1, typename T, T val = T()>
-struct __Test
-{
-	typedef typename std::integral_constant<T, val> A;
-
-	typedef std::is_same<A, typename T1<T, val>> IS_SAME;
-	constexpr static const bool isSame = IS_SAME::value;
-	T1<T, val> a;
-};
-
-size_t hash(const std::integral_constant<size_t, 1>& k, const size_t seed)
+uint32_t hash(const std::integral_constant<uint32_t, 1>& k, const uint32_t seed)
 {
 	return hash(k.value, seed);
 }
@@ -284,8 +342,6 @@ void TestKey()
 {
 	HashKeyProperties<K, mode> a;
 	constexpr bool _a1 = a.VALID_KEY_TYPE;
-	// constexpr bool _a3 = a.STD_ATOMIC_ALWAYS_LOCK_FREE;
-	// constexpr bool _a4 = a.STD_ATOMIC_AVAILABLE;
 	int i = 0;
 	i = 0;
 
@@ -295,43 +351,70 @@ void TestKey()
 	}
 }
 
+constexpr static const MapMode GetMapMode()
+{
+	if constexpr (SUT == Components::SUT_HASHMAP_INSERT_READ)
+	{
+		return MapMode::PARALLEL_INSERT_READ;
+	}
+	else if constexpr (SUT == Components::SUT_HASHMAP_INSERT_TAKE)
+	{
+		return MapMode::PARALLEL_INSERT_TAKE;
+	}
+	else
+	{
+		return MapMode::PARALLEL_INSERT_READ_GROW_FROM_HEAP;
+	}
+}
+
 int main()
 {
-	std::cout << std::endl;
 	try
 	{
 		auto iters = 0;
 		for (auto i = 1;; ++i)
 		{
-			// break;
 			std::cout << "*************************************************" << std::endl;
 			std::cout << "************************************** iteration: " << std::to_string(i) << std::endl;
-#ifdef TEST_HASHMAP
-			// Hash<int, Rand<16>, HeapAllocator<20>> test2(ITEMS);
-			// static Hash<int, Rand<16>, StaticAllocator<ITEMS, 20>> test2;
-			Hash<int, Rand<16>, HeapAllocator<32>> map(ITEMS);
-			ProcessDatas(map);
-#else
-			std::mutex testlock;
-			std::unordered_multimap<int, Rand<16>> map;
-			map.reserve(ITEMS);
-			ProcessDatas(map);
-#endif
-			auto start = std::chrono::steady_clock::now();
-			bool ret = ValidateDatas(map);
-			std::cout << "Validation result " << (ret ? "OK" : "ERROR") << std::endl;
-			auto end = std::chrono::steady_clock::now() - start;
-			auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end);
-			std::cout << "Validation for " << TESTED << " took " << duration.count() << std::endl;
+
+			if constexpr (SUT != Components::SUT_STD_UNORDERED_MULTIMAP)
+			{
+				if constexpr (HashAllocator == HashMemAllocator::HEAP)
+				{
+					Hash<int, Rand<16>, HeapAllocator<32>, GetMapMode()> map(ITEMS);
+					ProcessDatas(map);
+					if (!ValidateDatas(map))
+						return -1;
+				}
+				else if constexpr (HashAllocator == HashMemAllocator::STATIC)
+				{
+					static Hash<int, Rand<16>, StaticAllocator<ITEMS, 32>, GetMapMode()> map;
+					ProcessDatas(map);
+					if (!ValidateDatas(map))
+						return -1;
+				}
+			}
+			else
+			{
+				std::unordered_multimap<int, Rand<16>> map;
+				map.reserve(ITEMS);
+				ProcessDatas(map);
+				if (!ValidateDatas(map))
+					return -1;
+			}
+
 			std::cout << "###################################### iteration: " << std::to_string(i) << std::endl;
 			std::cout << "#################################################" << std::endl;
 
-			if (!ret)
-				return -1;
-		}
+			// return 0;
 
-		if (iters)
-			return 0;
+			if constexpr (GetMapMode() != MapMode::PARALLEL_INSERT_TAKE && HashAllocator == HashMemAllocator::STATIC)
+				// static map can be tested once only when not INSERT_TAKE
+				break;
+#ifdef _DEBUG
+				// break;
+#endif
+		}
 	}
 	catch (std::bad_alloc& alloc)
 	{
@@ -407,26 +490,6 @@ int main()
 	TestKey<int[2], MapMode::PARALLEL_INSERT_TAKE, false>(); // Fails verification
 	TestKey<int[2], MapMode::PARALLEL_INSERT_READ, false>(); // Fails verification
 
-	__Test<std::integral_constant, int, 1> a;
-	a.a;
-	a.isSame;
-#ifndef TEST_HASHMAP
-	test.reserve(ITEMS);
-#else
-	// const bool isLockFree = test2.IsLockFree();
-#endif // !TEST_HASHMAP
-
-#ifndef _DEBUG
-	/*ProcessDatas();
-
-	auto start = std::chrono::steady_clock::now();
-	bool ret = ValidateDatas();
-	std::cout << "Validation result " << (ret ? "OK" : "ERROR") << std::endl;
-	auto end = std::chrono::steady_clock::now() - start;
-	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end);
-	std::cout << "Validation for " << TESTED << " took " << duration.count() << std::endl;*/
-#endif
-
 	{ // Heap allocate, with max of 111 elements, default bucket size
 		Hash<TT, int> map(111);
 		constexpr auto isAlwaysLockFree = Hash<TT, int>::IsAlwaysLockFree();
@@ -448,7 +511,7 @@ bool operator==(const TT& o, const TT& t)
 }
 
 template <>
-size_t hash(const TT& k, const size_t seed)
+uint32_t hash(const TT& k, const uint32_t seed)
 {
 	const TT* k_ = &k;
 	const uint64_t* val = (uint64_t*)k_;
@@ -458,13 +521,13 @@ size_t hash(const TT& k, const size_t seed)
 }
 
 template <>
-size_t hash(const std::string& s, const size_t seed)
+uint32_t hash(const std::string& s, const uint32_t seed)
 {
 #define FNV_PRIME_32 16777619
 #define FNV_OFFSET_BASIS_32 2166136261
 
 	uint32_t fnv = FNV_OFFSET_BASIS_32;
-	for (size_t i = 0; i < s.size(); ++i)
+	for (uint32_t i = 0; i < s.size(); ++i)
 	{
 		fnv = fnv ^ (s[i]);
 		fnv = fnv * FNV_PRIME_32;
@@ -570,12 +633,12 @@ void someTests()
 		std::atomic<SHash::KeyValue*> keyRecycle[elems];
 		{
 			SHash map;
-			map.Init(size_t(elems), &bucket[0], &keys[0], &keyRecycle[0]);
+			map.Init(uint32_t(elems), &bucket[0], &keys[0], &keyRecycle[0]);
 			TestHash(map);
 		}
 		{
 			SHash map;
-			map.Init(size_t(elems), &bucket[0], &keys[0], &keyRecycle[0]);
+			map.Init(uint32_t(elems), &bucket[0], &keys[0], &keyRecycle[0]);
 			TestHash(map);
 		}
 	}

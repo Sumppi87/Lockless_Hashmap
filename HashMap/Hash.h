@@ -89,6 +89,12 @@ public: // Access functions
 
 	//! \brief
 	//! \param[in]
+	//! \param[in]
+	//! \return
+	MODE_NOT_TAKE(MODE) inline void Read(const K& k, const std::function<bool(const V&)>& receiver) noexcept;
+
+	//! \brief
+	//! \param[in]
 	//! \return
 	MODE_TAKE_ONLY(MODE) inline const V Take(const K& k) noexcept;
 
@@ -112,6 +118,8 @@ public: // Support functions
 	//! \brief
 	//! \return
 	inline bool IsLockFree() const noexcept;
+
+	constexpr static const MapMode GetMapMode() noexcept;
 
 private:
 	Container<Bucket, _Alloc::ALLOCATOR, _Alloc::KEY_COUNT> m_hash;
@@ -220,6 +228,15 @@ MODE_NOT_TAKE_IMPL const bool Hash<K, V, _Alloc, OP_MODE>::Read(const K& k, V& v
 }
 
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
+MODE_NOT_TAKE_IMPL void Hash<K, V, _Alloc, OP_MODE>::Read(const K& k,
+                                                          const std::function<bool(const V&)>& receiver) noexcept
+{
+	const uint32_t h = hash(k, seed);
+	const uint32_t index = (h & Base::GetHashMask());
+	m_hash[index].ReadValue(h, k, receiver);
+}
+
+template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 MODE_TAKE_ONLY_IMPL const V Hash<K, V, _Alloc, OP_MODE>::Take(const K& k) noexcept
 {
 	V ret = V();
@@ -267,6 +284,12 @@ template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 constexpr const bool Hash<K, V, _Alloc, OP_MODE>::IsAlwaysLockFree() noexcept
 {
 	return KeyValue::IsAlwaysLockFree();
+}
+
+template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
+constexpr const MapMode GetMapMode() noexcept
+{
+	return OP_MODE;
 }
 
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>

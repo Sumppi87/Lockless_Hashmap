@@ -3,7 +3,7 @@
 #include <atomic>
 #include <iostream>
 
-#define ENABLE_DEBUG_PRINTS 1
+#define ENABLE_DEBUG_PRINTS 0
 
 #if ENABLE_DEBUG_PRINTS
 
