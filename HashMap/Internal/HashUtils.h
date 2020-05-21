@@ -629,6 +629,12 @@ public:
 			return _current->v;
 		}
 
+		inline ~Iterator() noexcept
+		{
+			if (_current)
+				_release(_current);
+		}
+
 	private:
 		std::function<void(KeyValue*)> _release;
 		Bucket* _bucket;
