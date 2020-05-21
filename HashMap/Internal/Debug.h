@@ -3,6 +3,10 @@
 #include <atomic>
 #include <iostream>
 
+#define ENABLE_DEBUG_PRINTS 1
+
+#if ENABLE_DEBUG_PRINTS
+
 enum class DebugLevel
 {
 	TRACE,
@@ -14,56 +18,66 @@ enum class DebugLevel
 const char* __LEVELS[(unsigned int)DebugLevel::LEVELS]{"TRACE: ", "DEBUG: ", "ERROR: "};
 constexpr static bool ___ENABLED[(unsigned int)DebugLevel::LEVELS]{false, false, false};
 
+constexpr static bool IsDebugEnabled(const DebugLevel lvl)
+{
+	return ___ENABLED[(unsigned int)lvl];
+}
+
 static std::mutex __debug_lock;
 
+template <DebugLevel level>
 class Debug
 {
 public:
-	Debug(const DebugLevel level)
-	    : m_level(level)
+	template <typename... Args>
+	inline void Print(Args&&... args)
 	{
-	}
-
-	template <typename T>
-	inline Debug& operator<<(const T& t)
-	{
-		if (___ENABLED[(unsigned int)m_level])
-		{
-			std::lock_guard guard(__debug_lock);
-			std::cout << __LEVELS[(unsigned int)m_level] << t;
-		}
-		return *this;
-	}
-
-	// this is the type of std::cout
-	typedef std::basic_ostream<char, std::char_traits<char>> CoutType;
-
-	// this is the function signature of std::endl
-	typedef CoutType& (*StandardEndLine)(CoutType&);
-
-	// define an operator<< to take in std::endl
-	inline Debug& operator<<(const StandardEndLine manip)
-	{
-		if (___ENABLED[(unsigned int)m_level])
-		{
-			std::lock_guard guard(__debug_lock);
-			// call the function, but we cannot return it's value
-			manip(std::cout);
-		}
-		return *this;
+		std::lock_guard guard(__debug_lock);
+		std::cout << __LEVELS[(unsigned int)level];
+		_Print(std::forward<Args>(args)...);
+		std::cout << std::endl;
 	}
 
 private:
-	const DebugLevel m_level;
-};
-static Debug __debug[(unsigned int)DebugLevel::LEVELS]{DebugLevel::TRACE, DebugLevel::DEBUG, DebugLevel::ERROR};
+	template <typename Arg>
+	inline void _Print(Arg&& arg)
+	{
+		std::cout << std::forward<Arg&&>(arg);
+	}
 
-#define TRACE(x) __debug[(unsigned int)DebugLevel::TRACE] << x;
-#define TRACE __debug[(unsigned int)DebugLevel::TRACE]
-#define DEBUG(x) __debug[(unsigned int)DebugLevel::DEBUG] << x;
-#define DEBUG __debug[(unsigned int)DebugLevel::DEBUG]
-#define ERROR(x) __debug[(unsigned int)DebugLevel::ERROR] << x;
-#define ERROR __debug[(unsigned int)DebugLevel::ERROR]
+	template <typename Arg, typename... Args>
+	inline void _Print(Arg&& arg, Args&&... args)
+	{
+		_Print(std::forward<Arg>(arg));
+		_Print(std::forward<Args>(args)...);
+	}
+};
+
+static Debug<DebugLevel::TRACE> __trace;
+static Debug<DebugLevel::DEBUG> __debug;
+static Debug<DebugLevel::ERROR> __error;
+
+#define TRACE(...) \
+	if constexpr (IsDebugEnabled(DebugLevel::TRACE)) \
+	{ \
+		__trace.Print(__VA_ARGS__); \
+	}
+#define DEBUG(...) \
+	if constexpr (IsDebugEnabled(DebugLevel::DEBUG)) \
+	{ \
+		__debug.Print(__VA_ARGS__); \
+	}
+#define ERROR(...) \
+	if constexpr (IsDebugEnabled(DebugLevel::ERROR)) \
+	{ \
+		__error.Print(__VA_ARGS__); \
+	}
+
+#else
+#define TRACE(...)
+#define DEBUG(...)
+#define ERROR(...)
+#endif //  DISABLE_DEBUG_PRINTS
 
 #if defined(_DEBUG) || defined(VALIDATE_ITERATOR_NON_CONCURRENT_ACCESS)
 
@@ -77,7 +91,7 @@ struct ConcurrencyChecker
 		if (++_counter != 1)
 		{
 			// Concurrent access detected, where it's not allowed
-			ERROR << "Concurrent access detected where it is not allowed: " << _file << ":" << _line << std::endl;
+			ERROR("Concurrent access detected where it is not allowed: ", _file, ":", _line);
 			abort();
 		}
 	}
@@ -87,7 +101,7 @@ struct ConcurrencyChecker
 		if (--_counter != 0)
 		{
 			// Concurrent access detected, where it's not allowed
-			ERROR << "Concurrent access detected where it is not allowed: " << _file << ":" << _line << std::endl;
+			ERROR("Concurrent access detected where it is not allowed: ", _file, ":", _line);
 			abort();
 		}
 	}
@@ -101,4 +115,4 @@ private:
 #define CHECK_CONCURRENT_ACCESS(atomic_counter) ConcurrencyChecker ____checker(atomic_counter, __FILE__, __LINE__);
 #else
 #define CHECK_CONCURRENT_ACCESS(atomic_counter)
-#endif //  _DEBUG
+#endif //  _DEBUG || VALIDATE_ITERATOR_NON_CONCURRENT_ACCESS

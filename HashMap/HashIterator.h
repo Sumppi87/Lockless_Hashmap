@@ -64,7 +64,7 @@ KeyIterator<_Hash>& KeyIterator<_Hash>::SetKey(const K& k) noexcept
 {
 	CHECK_CONCURRENT_ACCESS(_counter);
 
-	TRACE << typeid(Iterator).name() << " SetKey()" << std::endl;
+	TRACE(typeid(Iterator).name(), " SetKey()");
 	_k = k;
 	_h = hash(k, _hash.seed);
 	const size_t index = (_h & _hash.GetHashMask());
@@ -87,7 +87,7 @@ template <typename _Hash>
 bool KeyIterator<_Hash>::Next() noexcept
 {
 	CHECK_CONCURRENT_ACCESS(_counter);
-	TRACE << typeid(Iterator).name() << " Next()" << std::endl;
+	TRACE(typeid(Iterator).name(), " Next()");
 	return _iter.Next();
 }
 
@@ -95,7 +95,7 @@ template <typename _Hash>
 typename _Hash::ValueType& KeyIterator<_Hash>::Value() noexcept
 {
 	CHECK_CONCURRENT_ACCESS(_counter);
-	TRACE << typeid(Iterator).name() << " Value()" << std::endl;
+	TRACE(typeid(Iterator).name(), " Value()");
 	return _iter.Value();
 }
 
@@ -103,21 +103,21 @@ template <typename _Hash>
 const typename _Hash::ValueType& KeyIterator<_Hash>::Value() const noexcept
 {
 	CHECK_CONCURRENT_ACCESS(_counter);
-	TRACE << typeid(Iterator).name() << " Value() const" << std::endl;
+	TRACE(typeid(Iterator).name(), " Value() const");
 	return _iter.Value();
 }
 
 template <typename _Hash>
 MODE_NOT_TAKE_IMPL void KeyIterator<_Hash>::SetIter() noexcept
 {
-	TRACE << typeid(Iterator).name() << " SetIter()" << std::endl;
+	TRACE(typeid(Iterator).name(), " SetIter()");
 	_iter = Iterator(_bucket, _h, _k);
 }
 
 template <typename _Hash>
 MODE_TAKE_ONLY_IMPL void KeyIterator<_Hash>::SetIter() noexcept
 {
-	TRACE << typeid(Iterator).name() << " SetIter()" << std::endl;
+	TRACE(typeid(Iterator).name(), " SetIter()");
 	_release = [=](typename _Hash::KeyValue* pKey) { _hash.ReleaseNode(pKey); };
 	_iter = Iterator(_bucket, _h, _k, _release);
 }
