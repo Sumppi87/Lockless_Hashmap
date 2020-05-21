@@ -120,15 +120,17 @@
     <ClCompile>
       <PrecompiledHeader>
       </PrecompiledHeader>
-      <WarningLevel>Level3</WarningLevel>
+      <WarningLevel>EnableAllWarnings</WarningLevel>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_VALIDATE_ITERATOR_NON_CONCURRENT_ACCESS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalOptions>/Zc:__cplusplus /D_ENABLE_ATOMIC_ALIGNMENT_FIX %(AdditionalOptions)</AdditionalOptions>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -163,9 +165,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Hash.h" />
-    <ClInclude Include="HashFunctions.h" />
-    <ClInclude Include="HashUtils.h" />
-    <ClInclude Include="MultiHash.h" />
+    <ClInclude Include="HashIterator.h" />
+    <ClInclude Include="Internal\Debug.h" />
+    <ClInclude Include="Internal\HashBase.h" />
+    <ClInclude Include="Internal\HashDefines.h" />
+    <ClInclude Include="Internal\HashFunctions.h" />
+    <ClInclude Include="Internal\HashUtils.h" />
+    <ClInclude Include="Internal\UtilityFunctions.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

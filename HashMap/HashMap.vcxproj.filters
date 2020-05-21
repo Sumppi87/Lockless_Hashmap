@@ -13,6 +13,9 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Header Files\Internal">
+      <UniqueIdentifier>{04f34f4b-b4c3-4a87-8292-399a27589289}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="HashMap.cpp">
@@ -23,14 +26,26 @@
     <ClInclude Include="Hash.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="MultiHash.h">
+    <ClInclude Include="HashIterator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="HashFunctions.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="Internal\Debug.h">
+      <Filter>Header Files\Internal</Filter>
     </ClInclude>
-    <ClInclude Include="HashUtils.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="Internal\HashBase.h">
+      <Filter>Header Files\Internal</Filter>
+    </ClInclude>
+    <ClInclude Include="Internal\HashDefines.h">
+      <Filter>Header Files\Internal</Filter>
+    </ClInclude>
+    <ClInclude Include="Internal\HashFunctions.h">
+      <Filter>Header Files\Internal</Filter>
+    </ClInclude>
+    <ClInclude Include="Internal\HashUtils.h">
+      <Filter>Header Files\Internal</Filter>
+    </ClInclude>
+    <ClInclude Include="Internal\UtilityFunctions.h">
+      <Filter>Header Files\Internal</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
