@@ -14,27 +14,27 @@ struct Allocator
 	typedef std::integral_constant<AllocatorType, TYPE> ALLOCATION_TYPE;
 };
 
-template <size_t COLLISION_SIZE, size_t MAX_ELEMENTS = 0, size_t KEY_COUNT = 0>
+template <uint32_t COLLISION_SIZE, uint32_t MAX_ELEMENTS = 0, uint32_t KEY_COUNT = 0>
 struct StaticSizes
 {
-	constexpr static const size_t MAX_ELEMENTS = MAX_ELEMENTS;
-	constexpr static const size_t KEY_COUNT = KEY_COUNT;
-	constexpr static const size_t COLLISION_SIZE = COLLISION_SIZE;
+	constexpr static const uint32_t MAX_ELEMENTS = MAX_ELEMENTS;
+	constexpr static const uint32_t KEY_COUNT = KEY_COUNT;
+	constexpr static const uint32_t COLLISION_SIZE = COLLISION_SIZE;
 
-	typedef typename std::integral_constant<size_t, COLLISION_SIZE> BUCKET_SIZE;
+	typedef typename std::integral_constant<uint32_t, COLLISION_SIZE> BUCKET_SIZE;
 };
 
 template <typename T>
 struct Array
 {
-	inline T& operator[](const size_t idx) noexcept
+	inline T& operator[](const uint32_t idx) noexcept
 	{
 #ifdef _DEBUG
 		assert(idx < _size);
 #endif // DEBUG
 		return _array[idx];
 	}
-	inline const T& operator[](const size_t idx) const noexcept
+	inline const T& operator[](const uint32_t idx) const noexcept
 	{
 #ifdef _DEBUG
 		assert(idx < _size);
@@ -43,22 +43,22 @@ struct Array
 	}
 
 	T* _array;
-	size_t _size;
+	uint32_t _size;
 };
 
-template <typename T, size_t SIZE>
+template <typename T, uint32_t SIZE>
 struct StaticArray
 {
 	static_assert(SIZE > 0, "Size cannot be zero");
 
-	inline T& operator[](const size_t idx) noexcept
+	inline T& operator[](const uint32_t idx) noexcept
 	{
 #ifdef _DEBUG
 		assert(idx < SIZE);
 #endif // DEBUG
 		return _array[idx];
 	}
-	inline const T& operator[](const size_t idx) const noexcept
+	inline const T& operator[](const uint32_t idx) const noexcept
 	{
 #ifdef _DEBUG
 		assert(idx < SIZE);
@@ -74,7 +74,7 @@ struct PtrArray : public Array<T>
 {
 	constexpr const static auto _T = sizeof(T);
 
-	explicit PtrArray(const size_t size)
+	explicit PtrArray(const uint32_t size)
 	{
 		Array<T>::_array = new T[size]{};
 		Array<T>::_size = size;
@@ -94,12 +94,12 @@ struct ExtArray : public Array<T>
 {
 	constexpr const static auto _T = sizeof(T);
 
-	inline ExtArray(T* array, const size_t size) noexcept
+	inline ExtArray(T* array, const uint32_t size) noexcept
 	{
 		Init(array, size);
 	}
 
-	inline void Init(T* ptr, const size_t size) noexcept
+	inline void Init(T* ptr, const uint32_t size) noexcept
 	{
 		memset(ptr, 0, size * sizeof(T));
 		Array<T>::_array = ptr;
@@ -112,7 +112,7 @@ struct ExtArray : public Array<T>
 template <typename K>
 struct KeyHashPairT
 {
-	size_t hash;
+	uint32_t hash;
 	K key;
 };
 
@@ -207,7 +207,7 @@ struct BucketLinkedList
 		return false;
 	}
 
-	inline bool Get(const size_t h, const K& k, V& v) noexcept
+	inline bool Get(const uint32_t h, const K& k, V& v) noexcept
 	{
 		if (KeyValue* keyValue = GetKeyValue(m_pFirst, h, k))
 		{
@@ -217,7 +217,7 @@ struct BucketLinkedList
 		return false;
 	}
 
-	inline static KeyValue* GetKeyValue(KeyValue* pNext, const size_t h, const K& k) noexcept
+	inline static KeyValue* GetKeyValue(KeyValue* pNext, const uint32_t h, const K& k) noexcept
 	{
 		while (pNext)
 		{
@@ -242,7 +242,7 @@ struct BucketLinkedList
 		{
 		}
 
-		inline explicit Iterator(Bucket* bucket, const size_t h, const K& k) noexcept
+		inline explicit Iterator(Bucket* bucket, const uint32_t h, const K& k) noexcept
 		    : _bucket(bucket)
 		    , _current(nullptr)
 		    , _h(h)
@@ -279,7 +279,7 @@ struct BucketLinkedList
 	private:
 		Bucket* _bucket;
 		KeyValue* _current;
-		size_t _h;
+		uint32_t _h;
 		K _k;
 	};
 
@@ -298,7 +298,7 @@ private:
 	std::atomic<KeyValue*> m_pFirst;
 };
 
-template <typename K, typename V, size_t COLLISION_SIZE>
+template <typename K, typename V, uint32_t COLLISION_SIZE>
 class BucketInsertRead
 {
 public:
@@ -329,7 +329,7 @@ public:
 		return ret; // On release build, compiler will optimize "ret" away, and directly returns
 	}
 
-	inline bool ReadValue(const size_t hash, const K& k, V& v) noexcept
+	inline bool ReadValue(const uint32_t hash, const K& k, V& v) noexcept
 	{
 		KeyValue* keyval = nullptr;
 		if (ReadValue(k, hash, &keyval))
@@ -340,12 +340,12 @@ public:
 		return false;
 	}
 
-	inline bool ReadValue(const size_t hash, const K& k, KeyValue** ppKeyValue) noexcept
+	inline bool ReadValue(const uint32_t hash, const K& k, KeyValue** ppKeyValue) noexcept
 	{
 		if (m_usageCounter == 0)
 			return false;
 
-		for (size_t i = 0; i < COLLISION_SIZE; ++i)
+		for (uint32_t i = 0; i < COLLISION_SIZE; ++i)
 		{
 			KeyValue* pCandidate = m_bucket[i];
 			if (pCandidate == nullptr)
@@ -361,12 +361,12 @@ public:
 		return false;
 	}
 
-	inline void ReadValues(const size_t hash, const K& k, const std::function<bool(const V&)>& f) noexcept
+	inline void ReadValues(const uint32_t hash, const K& k, const std::function<bool(const V&)>& f) noexcept
 	{
 		if (m_usageCounter == 0)
 			return;
 
-		for (size_t i = 0; i < COLLISION_SIZE; ++i)
+		for (uint32_t i = 0; i < COLLISION_SIZE; ++i)
 		{
 			KeyValue* pCandidate = m_bucket[i];
 			if (pCandidate == nullptr)
@@ -394,7 +394,7 @@ public:
 		{
 		}
 
-		inline explicit Iterator(Bucket* bucket, const size_t h, const K& k) noexcept
+		inline explicit Iterator(Bucket* bucket, const uint32_t h, const K& k) noexcept
 		    : _bucket(bucket)
 		    , _current(nullptr)
 		    , _currentIndex(0)
@@ -425,24 +425,25 @@ public:
 	private:
 		Bucket* _bucket;
 		KeyValue* _current;
-		size_t _currentIndex;
-		size_t _hash;
+		uint32_t _currentIndex;
+		uint32_t _hash;
 
 		K _k;
 	};
 
 private:
 	// Special implementation for Iterator
-	inline bool ReadValueFromIndex(size_t& startIndex, const size_t hash, const K& k, KeyValue** ppKeyValue) noexcept
+	inline bool
+	    ReadValueFromIndex(uint32_t& startIndex, const uint32_t hash, const K& k, KeyValue** ppKeyValue) noexcept
 	{
 		if (m_usageCounter == 0)
 		{
 			return false;
 		}
 
-		for (size_t i = 0; i < COLLISION_SIZE; ++i)
+		for (uint32_t i = 0; i < COLLISION_SIZE; ++i)
 		{
-			const size_t actualIdx = (i + startIndex) % COLLISION_SIZE;
+			const uint32_t actualIdx = (i + startIndex) % COLLISION_SIZE;
 
 			KeyValue* pCandidate = m_bucket[actualIdx];
 			if (pCandidate == nullptr)
@@ -461,10 +462,10 @@ private:
 
 private:
 	StaticArray<std::atomic<KeyValue*>, COLLISION_SIZE> m_bucket;
-	std::atomic<size_t> m_usageCounter; // Keys in bucket
+	std::atomic<uint32_t> m_usageCounter; // Keys in bucket
 };
 
-template <typename K, typename V, size_t COLLISION_SIZE>
+template <typename K, typename V, uint32_t COLLISION_SIZE>
 class BucketInsertTake
 {
 public:
@@ -484,7 +485,7 @@ public:
 			return false;
 		}
 
-		for (size_t i = 0; i < COLLISION_SIZE; ++i)
+		for (uint32_t i = 0; i < COLLISION_SIZE; ++i)
 		{
 			KeyValue* pExpected = nullptr;
 			if (m_bucket[i].compare_exchange_strong(pExpected, pKeyValue))
@@ -498,12 +499,12 @@ public:
 		return false;
 	}
 
-	inline bool TakeValue(const K& k, const size_t hash, KeyValue** ppKeyValue) noexcept
+	inline bool TakeValue(const K& k, const uint32_t hash, KeyValue** ppKeyValue) noexcept
 	{
 		if (m_usageCounter == 0)
 			return false;
 
-		for (size_t i = 0; i < COLLISION_SIZE; ++i)
+		for (uint32_t i = 0; i < COLLISION_SIZE; ++i)
 		{
 			// Check if Bucket was emptied while accessing
 			if (m_usageCounter == 0)
@@ -540,14 +541,14 @@ public:
 	}
 
 	inline void TakeValue(const K& k,
-	                      const size_t hash,
+	                      const uint32_t hash,
 	                      const std::function<bool(const V&)>& f,
 	                      const std::function<void(KeyValue*)>& release) noexcept
 	{
 		if (m_usageCounter == 0)
 			return;
 
-		for (size_t i = 0; i < COLLISION_SIZE; ++i)
+		for (uint32_t i = 0; i < COLLISION_SIZE; ++i)
 		{
 			// Check if Bucket was emptied while accessing
 			if (m_usageCounter == 0)
@@ -599,7 +600,7 @@ public:
 		}
 
 		inline explicit Iterator(Bucket* bucket,
-		                         const size_t h,
+		                         const uint32_t h,
 		                         const K& k,
 		                         const std::function<void(KeyValue*)>& release) noexcept
 		    : _release(release)
@@ -643,15 +644,15 @@ public:
 		std::function<void(KeyValue*)> _release;
 		Bucket* _bucket;
 		KeyValue* _current;
-		size_t _currentIndex;
-		size_t _hash;
+		uint32_t _currentIndex;
+		uint32_t _hash;
 
 		K _k;
 	};
 
 private:
 	// Special implementation for Iterator
-	inline bool TakeValue(size_t& startIndex, const K& k, const size_t hash, KeyValue** ppKeyValue) noexcept
+	inline bool TakeValue(uint32_t& startIndex, const K& k, const uint32_t hash, KeyValue** ppKeyValue) noexcept
 	{
 		TRACE(typeid(BucketInsertTake<K, V, COLLISION_SIZE>).name(), " TakeValue() from ", startIndex);
 		if (m_usageCounter == 0)
@@ -660,7 +661,7 @@ private:
 			return false;
 		}
 
-		for (size_t i = 0; i < COLLISION_SIZE; ++i)
+		for (uint32_t i = 0; i < COLLISION_SIZE; ++i)
 		{
 			// Check if Bucket was emptied while accessing
 			if (m_usageCounter == 0)
@@ -670,7 +671,7 @@ private:
 				//
 				return false;
 			}
-			const size_t actualIdx = (i + startIndex) % COLLISION_SIZE;
+			const uint32_t actualIdx = (i + startIndex) % COLLISION_SIZE;
 
 			KeyValue* pCandidate = m_bucket[actualIdx];
 			if (pCandidate == nullptr)
@@ -708,10 +709,10 @@ private:
 
 private:
 	StaticArray<std::atomic<KeyValue*>, COLLISION_SIZE> m_bucket;
-	std::atomic<size_t> m_usageCounter; // Keys in bucket
+	std::atomic<uint32_t> m_usageCounter; // Keys in bucket
 };
 
-template <typename T, AllocatorType TYPE, size_t SIZE = 0>
+template <typename T, AllocatorType TYPE, uint32_t SIZE = 0>
 struct Container
     : public std::conditional<
           std::is_same<std::integral_constant<AllocatorType, TYPE>, ALLOCATION_TYPE_HEAP>::value, // condition of outer
@@ -748,14 +749,14 @@ struct Container
 
 	template <typename AT = ALLOCATION_TYPE,
 	          typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type* = nullptr>
-	inline Container(T* ptr, const size_t size) noexcept
+	inline Container(T* ptr, const uint32_t size) noexcept
 	    : Base(ptr, size)
 	{
 	}
 
 	template <typename AT = ALLOCATION_TYPE,
 	          typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_EXTERNAL>::value>::type* = nullptr>
-	inline void Init(T* ptr, const size_t size) noexcept
+	inline void Init(T* ptr, const uint32_t size) noexcept
 	{
 		Base::Init(ptr, size);
 	}
@@ -766,14 +767,14 @@ struct Container
 
 	template <typename AT = ALLOCATION_TYPE,
 	          typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>
-	inline Container(const size_t size)
+	inline Container(const uint32_t size)
 	    : Base(size)
 	{
 	}
 
 	template <typename AT = ALLOCATION_TYPE,
 	          typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>
-	constexpr static const size_t NeededHeap(const size_t size)
+	constexpr static const uint32_t NeededHeap(const uint32_t size)
 	{
 		return sizeof(T) * size;
 	}
@@ -907,7 +908,7 @@ template <typename K, typename _Alloc>
 struct DefaultModeSelector
 {
 	typedef typename std::bool_constant<
-	    std::is_same<typename _Alloc::BUCKET_SIZE::type, std::integral_constant<size_t, 0>::type>::value>
+	    std::is_same<typename _Alloc::BUCKET_SIZE::type, std::integral_constant<uint32_t, 0>::type>::value>
 	    ZERO_SIZE_BUCKET; // Bucket size is not fixed -> Items are allocated from heap as needed
 
 	constexpr static const MapMode MODE =

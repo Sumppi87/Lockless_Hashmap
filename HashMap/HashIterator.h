@@ -33,13 +33,13 @@ private:
 	_Hash& _hash;
 	Iterator _iter;
 	K _k;
-	size_t _h;
+	uint32_t _h;
 	typename _Hash::Bucket* _bucket;
 	typename _Hash::KeyValue* _keyValue;
 
 	std::function<void(typename _Hash::KeyValue*)> _release;
 #if defined(_DEBUG) || defined(VALIDATE_ITERATOR_NON_CONCURRENT_ACCESS)
-	std::atomic<size_t> _counter;
+	std::atomic<uint32_t> _counter;
 #endif // !_DEBUG
 };
 
@@ -67,7 +67,7 @@ HashIterator<_Hash>& HashIterator<_Hash>::SetKey(const K& k) noexcept
 	TRACE(typeid(Iterator).name(), " SetKey()");
 	_k = k;
 	_h = hash(k, _hash.seed);
-	const size_t index = (_h & _hash.GetHashMask());
+	const uint32_t index = (_h & _hash.GetHashMask());
 	_bucket = &_hash.m_hash[index];
 
 	SetIter();

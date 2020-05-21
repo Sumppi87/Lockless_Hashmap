@@ -6,20 +6,20 @@
 template <typename _Alloc>
 struct StaticSize
 {
-	constexpr static const size_t MAX_ELEMENTS = _Alloc::MAX_ELEMENTS;
-	constexpr static const size_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS);
+	constexpr static const uint32_t MAX_ELEMENTS = _Alloc::MAX_ELEMENTS;
+	constexpr static const uint32_t KEY_COUNT = ComputeHashKeyCount(MAX_ELEMENTS);
 
 	static_assert(MAX_ELEMENTS > 0, "Element count cannot be zero");
 
-	constexpr static size_t GetKeyCount() noexcept
+	constexpr static uint32_t GetKeyCount() noexcept
 	{
 		return KEY_COUNT;
 	}
-	constexpr static size_t GetHashMask() noexcept
+	constexpr static uint32_t GetHashMask() noexcept
 	{
 		return GetKeyCount() - 1;
 	}
-	constexpr static size_t GetMaxElements() noexcept
+	constexpr static uint32_t GetMaxElements() noexcept
 	{
 		return MAX_ELEMENTS;
 	}
@@ -34,27 +34,27 @@ private:
 
 struct DynamicSize
 {
-	explicit DynamicSize(const size_t count) noexcept
+	explicit DynamicSize(const uint32_t count) noexcept
 	    : keyCount(ComputeHashKeyCount(count))
 	    , maxElements(count)
 	{
 	}
 
-	inline size_t GetKeyCount() const noexcept
+	inline uint32_t GetKeyCount() const noexcept
 	{
 		return keyCount;
 	}
-	inline size_t GetHashMask() const noexcept
+	inline uint32_t GetHashMask() const noexcept
 	{
 		return GetKeyCount() - 1;
 	}
-	inline size_t GetMaxElements() const noexcept
+	inline uint32_t GetMaxElements() const noexcept
 	{
 		return maxElements;
 	}
 
-	const size_t keyCount;
-	const size_t maxElements;
+	const uint32_t keyCount;
+	const uint32_t maxElements;
 
 private:
 	DISABLE_COPY_MOVE(DynamicSize)
@@ -69,14 +69,14 @@ struct DynamicSizeAllowInit
 	{
 	}
 
-	inline explicit DynamicSizeAllowInit(const size_t max_elements) noexcept
+	inline explicit DynamicSizeAllowInit(const uint32_t max_elements) noexcept
 	    : keyCount(ComputeHashKeyCount(max_elements))
 	    , maxElements(max_elements)
 	    , isInitialized(true)
 	{
 	}
 
-	inline bool Init(const size_t max_elements) noexcept
+	inline bool Init(const uint32_t max_elements) noexcept
 	{
 		bool initialized = false;
 		if (isInitialized.compare_exchange_strong(initialized, true))
@@ -88,22 +88,22 @@ struct DynamicSizeAllowInit
 		return false;
 	}
 
-	inline size_t GetKeyCount() const noexcept
+	inline uint32_t GetKeyCount() const noexcept
 	{
 		return keyCount;
 	}
-	inline size_t GetHashMask() const noexcept
+	inline uint32_t GetHashMask() const noexcept
 	{
 		return keyCount - 1;
 	}
-	inline size_t GetMaxElements() const noexcept
+	inline uint32_t GetMaxElements() const noexcept
 	{
 		return maxElements;
 	}
 
 private:
-	size_t keyCount;
-	size_t maxElements;
+	uint32_t keyCount;
+	uint32_t maxElements;
 	std::atomic<bool> isInitialized;
 
 	DISABLE_COPY_MOVE(DynamicSizeAllowInit)
@@ -142,20 +142,20 @@ protected:
 	    : m_recycle()
 	    , m_usedNodes(0)
 	{
-		for (size_t i = 0; i < Base::GetMaxElements(); ++i)
+		for (uint32_t i = 0; i < Base::GetMaxElements(); ++i)
 		{
 			m_recycle[i] = &m_keyStorage[i];
 		}
 	}
 
 	HEAP_ONLY(AT)
-	explicit HashBaseNormal(const size_t max_elements)
+	explicit HashBaseNormal(const uint32_t max_elements)
 	    : Base(max_elements)
 	    , m_keyStorage(max_elements)
 	    , m_recycle(max_elements)
 	    , m_usedNodes(0)
 	{
-		for (size_t i = 0; i < max_elements; ++i)
+		for (uint32_t i = 0; i < max_elements; ++i)
 		{
 			m_recycle[i] = &m_keyStorage[i];
 		}
@@ -169,7 +169,7 @@ protected:
 
 	inline KeyValue* GetNextFreeKeyValue() noexcept
 	{
-		for (size_t i = m_usedNodes; i < Base::GetMaxElements(); ++i)
+		for (uint32_t i = m_usedNodes; i < Base::GetMaxElements(); ++i)
 		{
 			KeyValue* pExpected = m_recycle[i];
 			if (pExpected == nullptr)
@@ -185,7 +185,7 @@ protected:
 
 	void ReleaseNode(KeyValue* pKeyValue) noexcept
 	{
-		for (size_t i = --m_usedNodes;; --i)
+		for (uint32_t i = --m_usedNodes;; --i)
 		{
 			KeyValue* pNull = nullptr;
 			if (m_recycle[i].compare_exchange_strong(pNull, pKeyValue))
@@ -201,17 +201,17 @@ protected:
 	Container<KeyValue, _Alloc::ALLOCATOR, _Alloc::MAX_ELEMENTS> m_keyStorage;
 	Container<std::atomic<KeyValue*>, _Alloc::ALLOCATOR, _Alloc::MAX_ELEMENTS> m_recycle;
 
-	std::atomic<size_t> m_usedNodes;
+	std::atomic<uint32_t> m_usedNodes;
 
-	constexpr static const size_t _keys = sizeof(m_keyStorage);
-	constexpr static const size_t _recycle = sizeof(m_recycle);
+	constexpr static const uint32_t _keys = sizeof(m_keyStorage);
+	constexpr static const uint32_t _recycle = sizeof(m_recycle);
 
 private:
 	DISABLE_COPY_MOVE(HashBaseNormal)
 };
 
 template <typename K, typename V, typename _Alloc>
-struct BaseAllocateItemsFromHeap : public _Alloc
+struct BaseAllocateItemsFromHeap : public RESOLVE_INTERNAL_BASE(_Alloc)
 {
 protected:
 	typedef typename _Alloc::ALLOCATION_TYPE AT;
@@ -226,7 +226,7 @@ protected:
 	}
 
 	HEAP_ONLY(AT)
-	explicit BaseAllocateItemsFromHeap(const size_t)
+	explicit BaseAllocateItemsFromHeap(const uint32_t)
 	    : m_usedNodes(0)
 	{
 	}
@@ -250,7 +250,7 @@ protected:
 	}
 
 private:
-	std::atomic<size_t> m_usedNodes;
+	std::atomic<uint32_t> m_usedNodes;
 
 	DISABLE_COPY_MOVE(BaseAllocateItemsFromHeap)
 };

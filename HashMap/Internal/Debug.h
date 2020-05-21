@@ -89,7 +89,7 @@ static Debug<DebugLevel::ERROR> __error;
 
 struct ConcurrencyChecker
 {
-	inline ConcurrencyChecker(std::atomic<size_t>& counter, const char* file, const int line) noexcept
+	inline ConcurrencyChecker(std::atomic<uint32_t>& counter, const char* file, const int line) noexcept
 	    : _counter(counter)
 	    , _file(file)
 	    , _line(line)
@@ -113,7 +113,7 @@ struct ConcurrencyChecker
 	}
 
 private:
-	std::atomic<size_t>& _counter;
+	std::atomic<uint32_t>& _counter;
 	const char* _file;
 	const int _line;
 

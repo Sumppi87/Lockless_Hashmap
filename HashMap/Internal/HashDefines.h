@@ -54,7 +54,7 @@
 	inline _class(const _class&&) noexcept = delete;
 
 // Number of slots in a single bucket
-const size_t DEFAULT_COLLISION_SIZE = 16;
+const uint32_t DEFAULT_COLLISION_SIZE = 16;
 
 enum class AllocatorType
 {
