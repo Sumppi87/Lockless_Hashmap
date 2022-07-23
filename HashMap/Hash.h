@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <assert.h>
 #include <functional>
 #include "Internal/HashFunctions.h"
@@ -139,10 +139,10 @@ private:
 };
 
 /// ******************************************************************************************* ///
-///																								///
-//										Implementation											///
-///																								///
-/// ****************************************************************************************** ///
+///                                                                                             ///
+///                                        Implementation                                       ///
+///                                                                                             ///
+/// ******************************************************************************************* ///
 
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 STATIC_ONLY_IMPL Hash<K, V, _Alloc, OP_MODE>::Hash(const uint32_t seed /*= 0*/) noexcept

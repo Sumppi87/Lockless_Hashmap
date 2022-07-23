@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <mutex>
 #include <atomic>
 #include <iostream>
@@ -34,7 +34,7 @@ public:
 	}
 
 	template <typename... Args>
-	inline void Print(Args&&... args) noexcept
+	inline void Print(const char* func, Args&&... args) noexcept
 	{
 		std::lock_guard guard(__debug_lock);
 		std::cout << __LEVELS[(unsigned int)level];
@@ -66,17 +66,17 @@ static Debug<DebugLevel::ERROR> __error;
 #define TRACE(...) \
 	if constexpr (IsDebugEnabled(DebugLevel::TRACE)) \
 	{ \
-		__trace.Print(__VA_ARGS__); \
+		__trace.Print(__FUNCSIG__, __VA_ARGS__); \
 	}
 #define DEBUG(...) \
 	if constexpr (IsDebugEnabled(DebugLevel::DEBUG)) \
 	{ \
-		__debug.Print(__VA_ARGS__); \
+		__debug.Print(__FUNCSIG__, __VA_ARGS__); \
 	}
 #define ERROR(...) \
 	if constexpr (IsDebugEnabled(DebugLevel::ERROR)) \
 	{ \
-		__error.Print(__VA_ARGS__); \
+		__error.Print(__FUNCSIG__, __VA_ARGS__); \
 	}
 
 #else
