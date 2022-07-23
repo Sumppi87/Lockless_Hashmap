@@ -31,9 +31,9 @@ template <typename K,
           typename V,
           typename _Alloc = HeapAllocator<>,
           MapMode OP_MODE = DefaultModeSelector<K, _Alloc>::MODE>
-class Hash : public RESOLVE_BASE_CLASS(OP_MODE, K, V, _Alloc)
+class Hash : private BaseResolver<K, V, _Alloc, OP_MODE>::Base
 {
-	typedef typename RESOLVE_BASE_CLASS(OP_MODE, K, V, _Alloc) Base;
+	typedef typename BaseResolver<K, V, _Alloc, OP_MODE>::Base Base;
 	typedef typename std::integral_constant<MapMode, OP_MODE> MODE;
 	typedef typename Base::AT AT;
 

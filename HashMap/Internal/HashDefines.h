@@ -37,16 +37,6 @@
 #define MODE_NOT_TAKE_IMPL \
 	template <typename _M, typename std::enable_if<!std::is_same<_M, MODE_INSERT_TAKE>::value>::type*>
 
-// Convenience macro for resolving Hash base-class
-#define RESOLVE_BASE_CLASS(OP_MODE, K, V, _Alloc) \
-	std::conditional< \
-	    std::is_same<std::integral_constant<MapMode, OP_MODE>, MODE_INSERT_READ_HEAP_BUCKET>::value, \
-	    BaseAllocateItemsFromHeap<K, V, _Alloc>, \
-	    HashBaseNormal<K, \
-	                   V, \
-	                   _Alloc, \
-	                   std::is_same<std::integral_constant<MapMode, OP_MODE>, MODE_INSERT_TAKE>::value>>::type
-
 #define DISABLE_COPY_MOVE(_class) \
 	inline _class& operator=(const _class&) noexcept = delete; \
 	inline _class& operator=(const _class&&) noexcept = delete; \

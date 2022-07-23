@@ -109,19 +109,21 @@ private:
 	DISABLE_COPY_MOVE(DynamicSizeAllowInit)
 };
 
-#define RESOLVE_INTERNAL_BASE(_Alloc) \
-	std::conditional< \
-	    std::is_same<typename _Alloc::ALLOCATION_TYPE, ALLOCATION_TYPE_STATIC>::value, \
-	    StaticSize<_Alloc>, \
-	    typename std::conditional<std::is_same<typename _Alloc::ALLOCATION_TYPE, ALLOCATION_TYPE_HEAP>::value, \
-	                              DynamicSize, \
-	                              DynamicSizeAllowInit>::type>::type
+template <typename _Alloc>
+struct AllocationBaseResolver
+{
+	typedef typename std::conditional<
+		std::is_same<typename _Alloc::ALLOCATION_TYPE, ALLOCATION_TYPE_STATIC>::value,
+		StaticSize<_Alloc>,
+		typename std::conditional<std::is_same<typename _Alloc::ALLOCATION_TYPE, ALLOCATION_TYPE_HEAP>::value,
+		DynamicSize, DynamicSizeAllowInit>::type>::type Base;
+};
 
 template <typename K, typename V, typename _Alloc, bool MODE_INSERT_TAKE>
-struct HashBaseNormal : public RESOLVE_INTERNAL_BASE(_Alloc)
+struct HashBaseNormal : public AllocationBaseResolver<_Alloc>::Base
 {
 protected:
-	typedef typename RESOLVE_INTERNAL_BASE(_Alloc) Base;
+	typedef typename AllocationBaseResolver<_Alloc>::Base Base;
 
 	static_assert(_Alloc::COLLISION_SIZE > 0,
 	              "!! LOGIC ERROR !! Collision bucket cannot be zero in this implementation");
@@ -211,7 +213,7 @@ private:
 };
 
 template <typename K, typename V, typename _Alloc>
-struct BaseAllocateItemsFromHeap : public RESOLVE_INTERNAL_BASE(_Alloc)
+struct BaseAllocateItemsFromHeap
 {
 protected:
 	typedef typename _Alloc::ALLOCATION_TYPE AT;
@@ -253,4 +255,14 @@ private:
 	std::atomic<uint32_t> m_usedNodes;
 
 	DISABLE_COPY_MOVE(BaseAllocateItemsFromHeap)
+};
+
+template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
+struct BaseResolver
+{
+	typedef typename std::conditional<
+		std::is_same<std::integral_constant<MapMode, OP_MODE>, MODE_INSERT_READ_HEAP_BUCKET>::value,
+		BaseAllocateItemsFromHeap<K, V, _Alloc>,
+		HashBaseNormal<K, V, _Alloc,
+		std::is_same<std::integral_constant<MapMode, OP_MODE>, MODE_INSERT_TAKE>::value>>::type Base;
 };
