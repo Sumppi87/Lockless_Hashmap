@@ -112,20 +112,21 @@ private:
 };
 
 template <typename _Alloc>
-struct AllocationBaseResolver
+struct AllocationBase
 {
 	typedef typename std::conditional<
-		std::is_same<typename _Alloc::ALLOCATION_TYPE, ALLOCATION_TYPE_STATIC>::value,
-		StaticSize<_Alloc>,
-		typename std::conditional<std::is_same<typename _Alloc::ALLOCATION_TYPE, ALLOCATION_TYPE_HEAP>::value,
-		DynamicSize, DynamicSizeAllowInit>::type>::type Base;
+	    std::is_same<typename _Alloc::ALLOCATION_TYPE, ALLOCATION_TYPE_STATIC>::value,
+	    StaticSize<_Alloc>,
+	    typename std::conditional<std::is_same<typename _Alloc::ALLOCATION_TYPE, ALLOCATION_TYPE_HEAP>::value,
+	                              DynamicSize,
+	                              DynamicSizeAllowInit>::type>::type Base;
 };
 
 template <typename K, typename V, typename _Alloc, bool MODE_INSERT_TAKE>
-struct HashBaseNormal : public AllocationBaseResolver<_Alloc>::Base
+struct HashBaseNormal : public AllocationBase<_Alloc>::Base
 {
 protected:
-	typedef typename AllocationBaseResolver<_Alloc>::Base Base;
+	typedef typename AllocationBase<_Alloc>::Base Base;
 
 	static_assert(_Alloc::COLLISION_SIZE > 0,
 	              "!! LOGIC ERROR !! Collision bucket cannot be zero in this implementation");
@@ -263,8 +264,8 @@ template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 struct BaseResolver
 {
 	typedef typename std::conditional<
-		std::is_same<std::integral_constant<MapMode, OP_MODE>, MODE_INSERT_READ_HEAP_BUCKET>::value,
-		BaseAllocateItemsFromHeap<K, V, _Alloc>,
-		HashBaseNormal<K, V, _Alloc,
-		std::is_same<std::integral_constant<MapMode, OP_MODE>, MODE_INSERT_TAKE>::value>>::type Base;
+	    std::is_same<std::integral_constant<MapMode, OP_MODE>, MODE_INSERT_READ_HEAP_BUCKET>::value,
+	    BaseAllocateItemsFromHeap<K, V, _Alloc>,
+	    HashBaseNormal<K, V, _Alloc, std::is_same<std::integral_constant<MapMode, OP_MODE>, MODE_INSERT_TAKE>::value>>::
+	    type Base;
 };
