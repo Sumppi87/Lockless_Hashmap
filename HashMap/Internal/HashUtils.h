@@ -32,7 +32,7 @@ struct GeneralKeyReqs
 
 	constexpr static const bool VALID_KEY_TYPE = GENERAL_REQS_MET::value;
 
-	constexpr const static bool AssertAll()
+	constexpr const static bool AssertAll() noexcept
 	{
 		static_assert(VALID_KEY_TYPE,
 		              "Key type must fulfill std::is_default_constructible<K>::value and std::is_copy_assignable<K>");
@@ -68,14 +68,14 @@ struct AtomicsRequired
 	          typename std::enable_if<std::is_same<TYPE, TRUE_TYPE>::value>::type* = nullptr>
 	__declspec(deprecated(
 	    "** sizeof(K) is too large for lock-less access, "
-	    "define `SKIP_ATOMIC_LOCKLESS_CHECKS´ to suppress this warning **")) constexpr static bool NotLockFree()
+	    "define `SKIP_ATOMIC_LOCKLESS_CHECKS` to suppress this warning **")) constexpr static bool NotLockFree() noexcept
 	{
 		return false;
 	}
 
 	template <typename TYPE = CHECK_TYPE,
 	          typename std::enable_if<std::is_same<TYPE, FALSE_TYPE>::value>::type* = nullptr>
-	constexpr static bool NotLockFree()
+	constexpr static bool NotLockFree() noexcept
 	{
 		return false;
 	}
@@ -88,13 +88,13 @@ struct AtomicsRequired
 			return NotLockFree();
 		}
 #else
-#pragma message("Warning: Hash-map lockless operations are not guaranteed, "
-		"remove define `SKIP_ATOMIC_LO-CKLESS_CHECKS` to ensure lock-less access")
+#pragma message("Warning: Hash-map lockless operations are not guaranteed, " \
+		"remove define `SKIP_ATOMIC_LOCKLESS_CHECKS` to ensure lock-less access")
 #endif
 		return true;
 	}
 
-	constexpr const static bool AssertAll()
+	constexpr const static bool AssertAll() noexcept
 	{
 		GENERAL_REQS.AssertAll();
 
@@ -121,12 +121,12 @@ struct HashKeyProperties
 
 	constexpr static const bool VALID_KEY_TYPE = Base::VALID_KEY_TYPE;
 
-	constexpr static bool IsValidKeyForMode()
+	constexpr static bool IsValidKeyForMode() noexcept
 	{
 		return VALID_KEY_TYPE;
 	}
 
-	constexpr const static bool AssertAll()
+	constexpr const static bool AssertAll() noexcept
 	{
 		return Base::AssertAll();
 	}

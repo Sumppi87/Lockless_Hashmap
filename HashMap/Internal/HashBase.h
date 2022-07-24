@@ -142,7 +142,7 @@ protected:
 	}
 
 	HEAP_ONLY(AT)
-	explicit HashBaseNormal(const uint32_t max_elements)
+	explicit HashBaseNormal(const uint32_t max_elements) noexcept
 	    : Base(max_elements)
 	    , m_keyStorage(max_elements)
 	    , m_recycle(max_elements)
@@ -214,7 +214,7 @@ protected:
 	typedef BucketLinkedList<K, V> Bucket;
 
 	STATIC_ONLY(AT)
-	BaseAllocateItemsFromHeap()
+	BaseAllocateItemsFromHeap() noexcept
 	    : m_usedNodes(0)
 	{
 	}

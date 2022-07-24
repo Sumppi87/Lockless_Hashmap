@@ -51,7 +51,7 @@ public: // Construction and initialization
 	//! \param[in]
 	//! \param[in]
 	//! \return
-	HEAP_ONLY(AT) inline Hash(const uint32_t max_elements, const uint32_t seed = 0);
+	HEAP_ONLY(AT) inline Hash(const uint32_t max_elements, const uint32_t seed = 0) noexcept;
 
 	//! \brief
 	//! \return
@@ -119,7 +119,7 @@ public: // Support functions
 	//! \return
 	inline bool IsLockFree() const noexcept;
 
-	constexpr static const MapMode GetMapMode() noexcept;
+	constexpr static MapMode GetMapMode() noexcept;
 
 private:
 	uint32_t GetKeyHash(const K& k) const noexcept;
@@ -128,7 +128,7 @@ private:
 private:
 	Container<Bucket, _Alloc::ALLOCATOR, _Alloc::KEY_COUNT> m_hash;
 
-	const uint32_t seed;
+	const uint32_t m_seed;
 
 	friend class HashIterator<Hash<K, V, _Alloc, OP_MODE>>;
 
@@ -152,21 +152,21 @@ template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 STATIC_ONLY_IMPL Hash<K, V, _Alloc, OP_MODE>::Hash(const uint32_t seed /*= 0*/) noexcept
     : Base()
     , m_hash()
-    , seed(seed == 0 ? GenerateSeed() : seed)
+    , m_seed(seed == 0 ? GenerateSeed() : seed)
 {
 }
 
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
-HEAP_ONLY_IMPL Hash<K, V, _Alloc, OP_MODE>::Hash(const uint32_t max_elements, const uint32_t seed /*= 0*/)
+HEAP_ONLY_IMPL Hash<K, V, _Alloc, OP_MODE>::Hash(const uint32_t max_elements, const uint32_t seed /*= 0*/) noexcept
     : Base(max_elements)
     , m_hash(ComputeHashKeyCount(max_elements))
-    , seed(seed == 0 ? GenerateSeed() : seed)
+    , m_seed(seed == 0 ? GenerateSeed() : seed)
 {
 }
 
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 EXT_ONLY_IMPL Hash<K, V, _Alloc, OP_MODE>::Hash() noexcept
-    : seed(GenerateSeed())
+    : m_seed(GenerateSeed())
 {
 }
 
@@ -308,6 +308,12 @@ bool Hash<K, V, _Alloc, OP_MODE>::IsLockFree() const noexcept
 		static KeyValue k;
 		return k.k.is_lock_free();
 	}
+}
+
+template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
+inline constexpr MapMode Hash<K, V, _Alloc, OP_MODE>::GetMapMode() noexcept
+{
+	return OP_MODE;
 }
 
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>

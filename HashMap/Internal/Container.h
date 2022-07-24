@@ -54,7 +54,7 @@ struct PtrArray : public Array<T>
 {
 	constexpr const static auto _T = sizeof(T);
 
-	explicit PtrArray(const uint32_t size)
+	explicit PtrArray(const uint32_t size) noexcept
 	{
 		Array<T>::_array = new T[size]{};
 		Array<T>::_size = size;
@@ -144,14 +144,14 @@ struct Container
 
 	template <typename AT = ALLOCATION_TYPE,
 	          typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>
-	inline Container(const uint32_t size)
+	inline Container(const uint32_t size) noexcept
 	    : Base(size)
 	{
 	}
 
 	template <typename AT = ALLOCATION_TYPE,
 	          typename std::enable_if<std::is_same<AT, ALLOCATION_TYPE_HEAP>::value>::type* = nullptr>
-	constexpr static const uint32_t NeededHeap(const uint32_t size)
+	constexpr static const uint32_t NeededHeap(const uint32_t size) noexcept
 	{
 		return sizeof(T) * size;
 	}

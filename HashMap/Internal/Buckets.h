@@ -51,8 +51,8 @@ struct KeyValueInsertTake
 			return NotLockFree();
 		}
 #else
-#pragma message("Warning: Hash-map lockless operations are not guaranteed, "
-		"remove define `SKIP_ATOMIC_LO-CKLESS_CHECKS` to ensure lock-less access")
+#pragma message("Warning: Hash-map lockless operations are not guaranteed, " \
+		"remove define `SKIP_ATOMIC_LOCKLESS_CHECKS` to ensure lock-less access")
 #endif
 		return true;
 	}
@@ -181,7 +181,7 @@ struct BucketLinkedList
 		K _k;
 	};
 
-	inline ~BucketLinkedList()
+	inline ~BucketLinkedList() noexcept
 	{
 		KeyValue* pDelete = m_pFirst;
 		while (pDelete)
