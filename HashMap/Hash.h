@@ -122,6 +122,10 @@ public: // Support functions
 	constexpr static const MapMode GetMapMode() noexcept;
 
 private:
+	uint32_t GetKeyHash(const K& k) const noexcept;
+	uint32_t GetKeyIndex(const uint32_t hash) const noexcept;
+
+private:
 	Container<Bucket, _Alloc::ALLOCATOR, _Alloc::KEY_COUNT> m_hash;
 
 	const uint32_t seed;
@@ -194,8 +198,8 @@ bool Hash<K, V, _Alloc, OP_MODE>::Add(const K& k, const V& v) noexcept
 	if (pKeyValue == nullptr)
 		return false;
 
-	const uint32_t h = hash(k, seed);
-	const uint32_t index = (h & Base::GetHashMask());
+	const auto h = GetKeyHash(k);
+	const auto index = GetKeyIndex(h);
 
 	pKeyValue->v = v;
 	pKeyValue->k = KeyHashPair{h, k};
@@ -211,8 +215,8 @@ bool Hash<K, V, _Alloc, OP_MODE>::Add(const K& k, const V& v) noexcept
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 MODE_NOT_TAKE_IMPL const V Hash<K, V, _Alloc, OP_MODE>::Read(const K& k) noexcept
 {
-	const uint32_t h = hash(k, seed);
-	const uint32_t index = (h & Base::GetHashMask());
+	const auto h = GetKeyHash(k);
+	const auto index = GetKeyIndex(h);
 	KeyValue* keyVal = nullptr;
 	if (m_hash[index].ReadValue(h, k, &keyVal))
 		return keyVal->v;
@@ -222,8 +226,8 @@ MODE_NOT_TAKE_IMPL const V Hash<K, V, _Alloc, OP_MODE>::Read(const K& k) noexcep
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 MODE_NOT_TAKE_IMPL const bool Hash<K, V, _Alloc, OP_MODE>::Read(const K& k, V& v) noexcept
 {
-	const uint32_t h = hash(k, seed);
-	const uint32_t index = (h & Base::GetHashMask());
+	const auto h = GetKeyHash(k);
+	const auto index = GetKeyIndex(h);
 	return m_hash[index].ReadValue(h, k, v);
 }
 
@@ -231,8 +235,8 @@ template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 MODE_NOT_TAKE_IMPL void Hash<K, V, _Alloc, OP_MODE>::Read(const K& k,
                                                           const std::function<bool(const V&)>& receiver) noexcept
 {
-	const uint32_t h = hash(k, seed);
-	const uint32_t index = (h & Base::GetHashMask());
+	const auto h = GetKeyHash(k);
+	const auto index = GetKeyIndex(h);
 	m_hash[index].ReadValue(h, k, receiver);
 }
 
@@ -241,8 +245,8 @@ MODE_TAKE_ONLY_IMPL const V Hash<K, V, _Alloc, OP_MODE>::Take(const K& k) noexce
 {
 	V ret = V();
 
-	const uint32_t h = hash(k, seed);
-	const uint32_t index = (h & Base::GetHashMask());
+	const auto h = GetKeyHash(k);
+	const auto index = GetKeyIndex(h);
 	KeyValue* pKeyValue = nullptr;
 	if (m_hash[index].TakeValue(k, h, &pKeyValue))
 	{
@@ -257,8 +261,8 @@ MODE_TAKE_ONLY_IMPL const V Hash<K, V, _Alloc, OP_MODE>::Take(const K& k) noexce
 template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 MODE_TAKE_ONLY_IMPL bool Hash<K, V, _Alloc, OP_MODE>::Take(const K& k, V& v) noexcept
 {
-	const uint32_t h = hash(k, seed);
-	const uint32_t index = (h & _Alloc::GetHashMask());
+	const auto h = GetKeyHash(k);
+	const auto index = GetKeyIndex(h);
 	KeyValue* pKeyValue = nullptr;
 	if (m_hash[index].TakeValue(k, h, &pKeyValue))
 	{
@@ -274,8 +278,8 @@ template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
 MODE_TAKE_ONLY_IMPL void Hash<K, V, _Alloc, OP_MODE>::Take(const K& k,
                                                            const std::function<bool(const V&)>& receiver) noexcept
 {
-	const uint32_t h = hash(k, seed);
-	const uint32_t index = (h & Base::GetHashMask());
+	const auto h = GetKeyHash(k);
+	const auto index = GetKeyIndex(h);
 	const auto release = [=](KeyValue* pKey) { this->ReleaseNode(pKey); };
 	m_hash[index].TakeValue(k, h, receiver, release);
 }
@@ -304,4 +308,18 @@ bool Hash<K, V, _Alloc, OP_MODE>::IsLockFree() const noexcept
 		static KeyValue k;
 		return k.k.is_lock_free();
 	}
+}
+
+template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
+uint32_t Hash<K, V, _Alloc, OP_MODE>::GetKeyHash(const K& k) const noexcept
+{
+	const uint32_t h = hash(k, m_seed);
+	return h;
+}
+
+template <typename K, typename V, typename _Alloc, MapMode OP_MODE>
+uint32_t Hash<K, V, _Alloc, OP_MODE>::GetKeyIndex(const uint32_t hash) const noexcept
+{
+	const uint32_t index = (hash % Base::GetKeyCount());
+	return index;
 }

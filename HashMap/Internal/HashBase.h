@@ -17,10 +17,6 @@ struct StaticSize
 	{
 		return KEY_COUNT;
 	}
-	constexpr static uint32_t GetHashMask() noexcept
-	{
-		return GetKeyCount() - 1;
-	}
 	constexpr static uint32_t GetMaxElements() noexcept
 	{
 		return MAX_ELEMENTS;
@@ -45,10 +41,6 @@ struct DynamicSize
 	inline uint32_t GetKeyCount() const noexcept
 	{
 		return keyCount;
-	}
-	inline uint32_t GetHashMask() const noexcept
-	{
-		return GetKeyCount() - 1;
 	}
 	inline uint32_t GetMaxElements() const noexcept
 	{
@@ -93,10 +85,6 @@ struct DynamicSizeAllowInit
 	inline uint32_t GetKeyCount() const noexcept
 	{
 		return keyCount;
-	}
-	inline uint32_t GetHashMask() const noexcept
-	{
-		return keyCount - 1;
 	}
 	inline uint32_t GetMaxElements() const noexcept
 	{
@@ -216,9 +204,10 @@ private:
 };
 
 template <typename K, typename V, typename _Alloc>
-struct BaseAllocateItemsFromHeap
+struct BaseAllocateItemsFromHeap : public AllocationBase<_Alloc>::Base
 {
 protected:
+	typedef typename AllocationBase<_Alloc>::Base Base;
 	typedef typename _Alloc::ALLOCATION_TYPE AT;
 	typedef KeyHashPairT<K> KeyHashPair;
 	typedef KeyValueLinkedList<K, V> KeyValue;
@@ -231,8 +220,9 @@ protected:
 	}
 
 	HEAP_ONLY(AT)
-	explicit BaseAllocateItemsFromHeap(const uint32_t)
-	    : m_usedNodes(0)
+	explicit BaseAllocateItemsFromHeap(const uint32_t max_elements) noexcept
+	    : Base(max_elements)
+	    , m_usedNodes(0)
 	{
 	}
 

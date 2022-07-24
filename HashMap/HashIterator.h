@@ -65,9 +65,11 @@ HashIterator<_Hash>& HashIterator<_Hash>::SetKey(const K& k) noexcept
 	CHECK_CONCURRENT_ACCESS(_counter);
 
 	TRACE(typeid(Iterator).name(), " SetKey()");
+
 	_k = k;
-	_h = hash(k, _hash.seed);
-	const uint32_t index = (_h & _hash.GetHashMask());
+	_h = _hash.GetKeyHash(k);
+	const auto index = _hash.GetKeyIndex(_h);
+
 	_bucket = &_hash.m_hash[index];
 
 	SetIter();

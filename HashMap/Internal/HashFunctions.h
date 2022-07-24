@@ -41,14 +41,6 @@ constexpr inline uint32_t hash(int64_t key, uint32_t seed = 0) noexcept
 {
 	return hash(uint64_t(key), seed);
 }
-template <class T>
-inline uint32_t hash(const T* key, uint32_t seed) noexcept
-{
-	return hash(reinterpret_cast<uint32_t>(key), seed);
-}
-
-// template<typename T>
-// inline uint32_t hash(const T& t, uint32_t seed = 0) = delete;
 
 template <typename T>
 inline uint32_t hash(const T& t, uint32_t seed) noexcept(noexcept(hash(t)))
