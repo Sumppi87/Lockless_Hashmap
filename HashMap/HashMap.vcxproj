@@ -166,6 +166,8 @@
   <ItemGroup>
     <ClInclude Include="Hash.h" />
     <ClInclude Include="HashIterator.h" />
+    <ClInclude Include="Internal\Buckets.h" />
+    <ClInclude Include="Internal\Container.h" />
     <ClInclude Include="Internal\Debug.h" />
     <ClInclude Include="Internal\HashBase.h" />
     <ClInclude Include="Internal\HashDefines.h" />
